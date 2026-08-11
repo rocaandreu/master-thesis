@@ -19,8 +19,8 @@
   \vspace{15mm}
   {\huge\bfseries \getTitle{} \par}
 
-  \vspace{10mm}
-  {\huge\bfseries \foreignlanguage{ngerman}{\getTitleGer{}} \par}
+  % \vspace{10mm}
+  % {\huge\bfseries \foreignlanguage{ngerman}{\getTitleGer{}} \par}
 
   \vspace{15mm}
   \begin{tabular}{l l}
@@ -33,5 +33,10 @@
   \IfFileExists{logos/faculty.pdf}{%
     \vfill{}
     \includegraphics[height=20mm]{logos/faculty.pdf}
+  }{}
+
+  \IfFileExists{logos/upc.pdf}{%
+    \vfill{}
+    \includegraphics[height=20mm]{logos/upc.pdf}
   }{}
 \end{titlepage}

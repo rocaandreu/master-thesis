@@ -1,0 +1,86 @@
+\chapter{Work Plan}
+
+\section{Timeline Overview}
+
+The following section shows the overall time plan of the project in the form of a Gantt chart in \ref{fig:gantt}. \\
+
+\begin{figure}
+\centering
+\resizebox{\textwidth}{!}{
+\begin{ganttchart}[
+    hgrid,
+    vgrid,
+    x unit=0.50cm,
+   % bar/.style={fill=blue!50},
+   % group/.style={fill=gray!40}
+]{1}{26}
+
+\gantttitle{Thesis Timeline (Weeks)}{26} \\
+\gantttitle{March}{4}
+\gantttitle{April}{5}
+\gantttitle{May}{4}
+\gantttitle{June}{5}
+\gantttitle{July}{4}
+\gantttitle{August}{4} \\
+
+% Phase 1
+\ganttgroup{Pre-planning}{1}{5} \\
+\ganttbar[name=task0]{Planning and research}{1}{5} \\
+
+% Phase 2
+\ganttgroup{First iteration}{6}{16} \\
+\ganttbar[name=task1]{Preliminary design and setup}{6}{8} \\
+\ganttbar[name=task2]{First iteration (simulation)}{9}{12} \\
+\ganttbar[name=task3]{FPGA integration}{13}{14} \\
+\ganttbar[name=task4]{Performance and metrics evalutaion}{15}{16} \\
+
+% Phase 3
+\ganttgroup{Additional things (RX side, fancier buffering, tight-coupling...)}{17}{26} \\
+\ganttbar[name=task5]{TBD}{17}{26} \\
+
+% Links
+\ganttlink{task0}{task1}
+\ganttlink{task1}{task2}
+\ganttlink{task2}{task3}
+\ganttlink{task3}{task4}
+\ganttlink{task4}{task5}
+
+% Milestones
+\ganttgroup{Milestones}{1}{26} \\
+\ganttmilestone{First version working in simulation}{12} \\
+\ganttmilestone{FPGA integration}{14} \\
+\ganttmilestone{First round of testing on the FPGA finished}{16} \\
+
+\end{ganttchart}
+}
+
+\caption{Gantt chart of the Work plan}
+\label{fig:gantt}
+\end{figure}
+
+\section{Phase breakdown and milestones}
+
+\begin{itemize}
+    \item First iteration: Preliminary design defined and dummy modules compiling
+    \begin{itemize}
+      \item Preliminary design (due Apr. 22nd):
+      \begin{itemize}
+        \item Comprehensive drawio diagram and documentation with all the modules and description of policy, interfaces, etc...
+        \item Dummy modules (no logic but with interfaces)
+        \item Basic simulation setup:
+        \begin{itemize}
+          \item No linux
+          \item Setup compilation and simulation environment (tools, TB, CI?)
+          \item Stimuli generator (generate flows with the appropiate format)
+        \end{itemize}
+      \end{itemize}
+      \item First version requirements:
+      \begin{itemize}
+        \item RX side only
+        \item Hash to identify different flows
+        \item Only 1 allocation policy
+        \item Working in simulation and FPGA
+      \end{itemize}
+    \end{itemize}
+    
+\end{itemize}

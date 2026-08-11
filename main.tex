@@ -4,18 +4,27 @@
 %\documentclass[headsepline,footsepline,footinclude=false,fontsize=11pt,paper=a4,listof=totoc,bibliography=totoc,BCOR=12mm,DIV=12]{scrbook} % two-sided
 \documentclass[headsepline,footsepline,footinclude=false,oneside,fontsize=11pt,paper=a4,listof=totoc,bibliography=totoc]{scrbook} % one-sided
 
+% INFO: Include more packages
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{pgfgantt}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
 % TODO: change citation style in settings
 \input{settings}
 
 % TODO: change thesis information
 \newcommand*{\getUniversity}{Technische Universität München}
-\newcommand*{\getFaculty}{Department of Informatics}
-\newcommand*{\getTitle}{Thesis title}
+\newcommand*{\getFaculty}{Chair of Integrated Systems}
+\newcommand*{\getTitle}{Flow Management and Buffering Strategies for Hardware-based FEC}
 \newcommand*{\getTitleGer}{Titel der Abschlussarbeit}
-\newcommand*{\getAuthor}{Author}
-\newcommand*{\getDoctype}{Thesis type (Bachelor's Thesis in Informatics, Master's Thesis in Robotics, \ldots)}
-\newcommand*{\getSupervisor}{Supervisor}
-\newcommand*{\getAdvisor}{Advisor}
+\newcommand*{\getAuthor}{Andreu Roca i Montserrat}
+\newcommand*{\getDoctype}{Master's Thesis \ldots)}
+\newcommand*{\getSupervisor}{Juan Antonio Chávez Domínguez}
+\newcommand*{\getAdvisor}{William Wulff}
 \newcommand*{\getSubmissionDate}{Submission date}
 \newcommand*{\getSubmissionLocation}{Munich}
 
@@ -24,7 +33,7 @@
 % Set page numbering to avoid "destination with the same identifier has been already used" warning for cover page.
 % (see https://en.wikibooks.org/wiki/LaTeX/Hyperlinks#Problems_with_Links_and_Pages).
 \pagenumbering{alph}
-\input{pages/cover}
+%\input{pages/cover}
 
 \frontmatter{}
 
@@ -40,6 +49,7 @@
 
 \input{chapters/01_introduction}
 % TODO: add more chapters here
+\input{chapters/work_plan}
 
 \appendix{}
 

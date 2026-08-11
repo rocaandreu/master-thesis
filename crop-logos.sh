@@ -6,6 +6,12 @@ command -v pdfcrop >/dev/null 2>&1 || {
   exit 1
 }
 
+# Change all .svg .png and .jpeg to .pdf to import into latex
+for f in logos/*.svg logos/*.png logos/*.jpeg; do
+  [ -e "$f" ] || continue
+  inkscape "$f" -o "${f%.*}.pdf"
+done
+
 LOGOS=(tum faculty)
 
 for logo in ${LOGOS[@]}
