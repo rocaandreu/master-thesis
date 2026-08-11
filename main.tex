@@ -1,52 +1,73 @@
-\RequirePackage[l2tabu,orthodox]{nag}
+\documentclass{listhesis}
+% --- Listhesis builds on KOMA script report (scrreprt).
+%     Class arguments are passed to that class.
 
-% TODO: decide if one-sided/two-sided
-%\documentclass[headsepline,footsepline,footinclude=false,fontsize=11pt,paper=a4,listof=totoc,bibliography=totoc,BCOR=12mm,DIV=12]{scrbook} % two-sided
-\documentclass[headsepline,footsepline,footinclude=false,oneside,fontsize=11pt,paper=a4,listof=totoc,bibliography=totoc]{scrbook} % one-sided
+% --- Add additional packages here using \usepackage{package-name}.
+\usepackage{tikz}
+% - Uncomment the following two lines, if compilation takes too long due to tikz pictures; this requires pdflatex to be called with shell-escape / write18 (Overleaf does this automatically)
+%\usetikzlibrary{external}
+%\tikzexternalize[prefix=tikz/]
 
-% TODO: change citation style in settings
-\input{settings}
-
-% TODO: change thesis information
-\newcommand*{\getUniversity}{Technische Universität München}
-\newcommand*{\getFaculty}{Department of Informatics}
-\newcommand*{\getTitle}{Thesis title}
-\newcommand*{\getTitleGer}{Titel der Abschlussarbeit}
-\newcommand*{\getAuthor}{Author}
-\newcommand*{\getDoctype}{Thesis type (Bachelor's Thesis in Informatics, Master's Thesis in Robotics, \ldots)}
-\newcommand*{\getSupervisor}{Supervisor}
-\newcommand*{\getAdvisor}{Advisor}
-\newcommand*{\getSubmissionDate}{Submission date}
-\newcommand*{\getSubmissionLocation}{Munich}
+% --- Provide your thesis details here.
+\setup{%
+  % de,                   % uncomment if your thesis is in German
+  author=Andreu Roca i Montserrat, % your name
+  title={Design of a Flow-Aware Packet Buffer for Hardware-Based Forward Error Correction},
+  % date={July 14, 2017}, % submission date (today is used if unset)
+  % type=bachelor,        % thesis type [master, bachelor, research, internship, diplom]
+  advisor=William Wulff, % your advisor (typically some PhD. student)
+  supervisor=Prof. Dr. sc. techn. Thomas Wild, % your supervisor
+  % % uncomment the next lines if your thesis was carried out in industry
+  % company=External Company,
+  % externalAdvisor=Your Companyadvisor
+  AIUsage={literature research, coding, automation}, % comma-separated list of things AI tools were used for; leave unset/empty to omit the AI disclosure
+}
 
 \begin{document}
 
-% Set page numbering to avoid "destination with the same identifier has been already used" warning for cover page.
-% (see https://en.wikibooks.org/wiki/LaTeX/Hyperlinks#Problems_with_Links_and_Pages).
-\pagenumbering{alph}
-\input{pages/cover}
+\maketitle
+\cleardoublepage
 
-\frontmatter{}
+% --- Thesis abstract.
+%     For German thesis also provide an English version via the optional
+%     argument: \abstract[English]{German}
+\abstract{An abstract is defined as an abbreviated accurate
+  representation of the contents of a document. -- American National
+  Standards Institute (ANSI)}
+\makeabstract
+\clearpage
 
-\input{pages/title}
-\input{pages/disclaimer}
-\input{pages/acknowledgments}
-\input{pages/abstract}
-\microtypesetup{protrusion=false}
-\tableofcontents{}
-\microtypesetup{protrusion=true}
+% --- Content tables.
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+\listoftables
+\clearpage
 
-\mainmatter{}
+% --- Your thesis starts here.
+%     Use \chapter{}, \section{}, \subsection{}, \subsubsection{},
+%     and \paragraph{} to structure your thesis.
 
-\input{chapters/01_introduction}
-% TODO: add more chapters here
+\include{chapters/1_introduction}
+\include{chapters/2_related_work}
+\include{chapters/3_approach}
+\include{chapters/4_implementation}
+\include{chapters/5_evaluation}
+\include{chapters/6_conclusion}
 
-\appendix{}
 
-\microtypesetup{protrusion=false}
-\listoffigures{}
-\listoftables{}
-\microtypesetup{protrusion=true}
-\printbibliography{}
+% --- Bibliography
+\cleardoublepage
+\bibliographystyle{plain}
+\bibliography{thesis}
+
+% --- Mandatory confirmation.
+\confirmation
 
 \end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:

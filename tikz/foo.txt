@@ -1,0 +1,2 @@
+Required for tikzexternalize
+Otherwise, this directory will be deleted in git.

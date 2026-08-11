@@ -1,0 +1,75 @@
+\chapter{Approach}
+The main part of your thesis. Here you describe your approach to solve
+the problem you stated in the Introduction.  Be as general as possible.
+
+\section{Context} % Where does the design live?
+Context about where does the design live and the stuff 
+
+\subsection{Open-Nic Project}
+Explain overall system, the plugin architecture, AXI Stream interface, and 250MHz box.
+
+\subsection{FEC encoder}
+Brief introduction, give some specifics about the FEC encoder that follows the buffer.
+I have to cover specifically the latency.
+
+\section{Design requirements}
+Based on the context given in the last section, reference the numbers of latency and throughput we should 
+aim to maintain to keep the max throughput of the AXI interface (and therefore the MAC).
+
+These are the hard requirements:
+\begin{enumerate}
+  \item Support over X active flows at any time
+  \item Generation size from 8 to 32
+  \item Throughput of 100 Gb/s to feed Ethernet MAC
+  \item Latency of under 1us to let FEC encoder dominate
+  \item Configurable number of flows (compile time)
+  \item Configurable generation size (compile time)
+\end{enumerate}
+
+These are "nice to haves":
+\begin{enumerate}
+  \item Configurable priority of flows (dynamic)
+  \item Configurable generation size (dynamic)
+\end{enumerate}
+
+\subsection{Throughput and latency}
+Here we explain that throughput (100Gb/s) and latency (>1us) are the main 
+
+\subsection{Assumptions and constraints}
+Here I should explain the design is only being simulated, that the target is to eventually synthesize it,
+and that there is still work to do to make it usable, mainly adding the configuration stuff. Remark that
+this is mostly the baseline platform to build from. Note that it is very expandable.
+
+\section{Main design}
+
+\subsubsection{Design sizing}
+Note that we are basing the design in a shared-memory pool system, so we need to figure out the dimmensions of the pool:
+Speak about interfaces and HBM IP and how they determined the dimensions of the system. The though process 
+should be like so: NR\_FLOWS * ACTIVE\_FLOWS = ~Tenths/few hundred Megabytes $\rightarrow$ Too large to fit into URAM or BRAM!!!
+$\rightarrow$ We have to use HBM $\rightarrow$ How many slave ports do we need to maintain throughput? $\rightarrow$ Given in-flight transactions,
+latency and bus width, at least two. $\rightarrow$ This gives us a total mem pool of 512MB, which would give us a maximum of 
+~300,000 packets (assuming MTU and no fragmentation), enough to have a few hundred packets per flow with 1024 flows, so we good.
+
+\subsection{Overall architecture}
+Add diagram of whole system, say that it looks like a shared memory system etc...
+
+Give a short walk through the datapath and say it will be elaborated later on.
+
+\subsection{Memory architecture}
+Super duper diagram indicating that we use a 
+
+\subsection{Flow ingest}
+Diagram + explanation of this stage.
+
+\subsection{Chunk ingest (packet writer)}
+Diagram + explanation of this stage.
+
+\subsection{Packet reader}
+Diagram + explanation of this stage.
+
+\subsection{Packet and memory queues}
+Diagram + explanation of this stage.
+
+\section{Previous HBM architecture}
+Here I can speak (if William finds it appropriate) about the previous architecture without axi stream, since I already have the diagrams.
+

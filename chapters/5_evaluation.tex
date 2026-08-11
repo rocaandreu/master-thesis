@@ -1,0 +1,23 @@
+\chapter{Evaluation}
+Using the previously presented implementation, you can now evaluate your approach.\\
+Get as many quantitative measurements as possible.  E.g. compare
+different implementations in terms of hardware usage, latency...\\
+This chapter is usually filled with graphs and numbers.  In the end, the
+numbers should show how your approach is better (in some regard) than
+existing approaches.
+
+\section{Performance evaluation}
+Comment the axis of freedom (NR\_FLOWS, GENSIZE, PKT\_FIFO\_LENGTH, MEM\_FIFO\_LENGTH...) and showcase results.\\
+
+There will be a table for every cobination of the previous parameters we deem appropriate.
+
+Here are some flow patterns we test with every configuration:
+\begin{itemize}
+  \item Random burst length, small pkts.
+  \item Random burst length, Big pkts.
+  \item Random burst length, Random pkts.
+  \item Long burst length, R andom pkts.
+  \item ...
+\end{itemize}
+
+
