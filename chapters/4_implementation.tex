@@ -89,24 +89,14 @@ for the design, hence both the FEC encoder and packet buffer are built inside th
 Brief introduction, give some specifics about the FEC encoder that follows the buffer.
 I have to cover specifically the latency. Interface defined in \ref{interface_definition}
 
-\section{System requirements}\label{system_requirements}
-Based on the context given in the last section, reference the numbers of latency and throughput we should 
-aim to maintain to keep the max throughput of the AXI interface (and therefore the MAC).
-
-
-\subsection{Development and simulation}
+\subsection{Testbench architecture}
 Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do.
-
-\subsection{Synthesis flow}
-Out of context synthesis tools (basically vivado)
-
-\subsection{Duck EDA tool wrapper integration}
-Maybe unnecessary, but we could mention we developed a cool expandable EDA tool wrapper that helps compile,
-simulate and synthesize the design.
 
 \section{Initial decisions and sizing}
 
-Before covering the actual inner workings of the modules, it is important to delve into the characteristics of the intefaces and HBM we are working with.
+Before covering the actual inner workings of the modules, it is important to delve into the characteristics 
+of the interfaces we are working with to see how they will constraint the implementation, particularly 
+in the case of the HBM controller.
 
 \subsection{Main input and output interfaces (AXI Stream bus)}\label{interface_definition}
 
@@ -127,7 +117,7 @@ where the direction in/out direction inverted.
 \textbf{Signal} & \textbf{Width} & \textbf{Direction} & \textbf{Description} \\ \hline
 tdata  & 512 & in  & Main data signal. \\
 tvalid & 1   & in  & Validates the current tdata value. \\
-tkeep  & 64  & in  & Write strobe for the tdata beat. Technically unneeded as the CMAC does not support partial writes. \\
+tkeep  & 64  & in  & Write strobe for the tdata beat. Technically unneeded as the QDMA does not support partial writes. \\
 tlast  & 1   & in  & Pulse indicating the last beat of a burst transaction. \\
 tready & 1   & out & Ready signal from the receiving side. \\ \hline
 \end{tabular}
@@ -146,11 +136,44 @@ freedom to have some idle cycles without compromising the maximum throughput of 
 = 128\times10^9\,\frac{\text{bits}}{\text{second}}
 = \boxed{\text{128}\,\text{Gbit/s}}
 \]
+\subsection{HBM Controller IP overview}
+
+The HBM is accessed via the \textit{AXI High Bandwidth Memory Controller LogiCORE IP} \cite{amd_pg276_axi_hbm} provided by Xilinx with their HBM capable boards.
+Most of the architectural decisions are based on working around its characteristics to meet the throughput and latency requirements, and this 
+section provides a very brief summary of the provided features in table \ref{tab:u55c_hbm_overview}. More detailed information can be found in the official product page. \\
+
+\begin{table}
+    \centering
+    \begin{tabular}{ll}
+        \hline
+        \textbf{Feature} & \textbf{Specification} \\
+        \hline
+        Memory technology       & HBM2 \\
+        Total capacity          & 16 GB \\
+        Peak HBM bandwidth      & 460 GB/s \\
+        HBM stacks              & 2 \\
+        Capacity per stack      & 8~GB \\
+        Pseudo-channels         & 32 total (16 per stack) \\
+        Capacity per pseudo-channel & 512 MB \\
+        Memory clock frequency  & Up to 900 MHz \\
+        AXI clock frequency     & Up to 450 MHz \\
+        AXI interfaces          & 32 (1 per pseudo-channel) \\
+        AXI data width          & 256 bits (32~bytes) \\
+        AXI address width       & 34 bits \\
+        AXI burst length        & Up to 16 beats \\
+        Minimum transfer size   & 32 bytes \\
+        Addressing modes        & Local (non-global) / Global \\
+        Access latency (fixed addressing) & 90 to 108 memory cycles \\
+        Access latency (global addressing) & at least 110 or 128 memory cycles \\
+        \hline
+    \end{tabular}
+    \caption{Feature overview of the HBM subsystem on the AMD Alveo U55C.}
+    \label{tab:u55c_hbm_overview}
+\end{table}
 
 \subsection{HBM Controller operation mode}
 
-The HBM is accessed via the \textit{AXI High Bandwidth Memory Controller LogiCORE IP} \cite{amd_pg276_axi_hbm} provided by Xilinx with their HBM capable boards.
-Most of the architectural decisions are based on working around its characteristics. \\
+The HBM controller supports two main operation modes that offer a compromise between ease of use and performance and predictability:
 
 \begin{itemize}
   \item \textbf{Fixed address mode}: Each AXI interface is directly associated with a specific HBM pseudo-channel, and the address
@@ -230,7 +253,7 @@ read-related ones to the packet reader, as these modules will only ever send wri
 
 \begin{figure}
   \begin{center}
-    \includegraphics[width=0.55\textwidth]{../img/axi_channel_split.png}
+    \includegraphics[width=0.45\textwidth]{../img/axi_channel_split.png}
   \end{center}
   \caption{AXI Channel splitting into write and read sides (one pseudo-channel example)}\label{fig:axi_channel_split}
 \end{figure}
@@ -286,9 +309,8 @@ selected.
 The discussion so far covered mainly throughput and latency concerns, however the initial reason behind using the HBM 
 available in the U55C was the storage capacity, so this aspect must also be considered.\\
 
-Anew, referring to the official specification \cite{amd_pg276_axi_hbm} reveals that 512 MB of storage
-are allocated to every pseudo-channel in the Alveo U55C board. Allocating 2KB per packet as described 
-in \ref{subs:mem_architecture} and assuming two pseudo-channels 
+Anew, considering that 512 MB of storage are allocated to every pseudo-channel, counting 2KB per packet as described 
+in \ref{subs:mem_architecture}, and assuming two pseudo-channels; 
 yields a total of 500,000 packets, which is enough to fulfil the requirements by one or two orders of magnitude:
 
 \[
@@ -340,12 +362,10 @@ Other smaller considerations not mentioned in previous discussions are the follo
     the maximum packet size of 1500 bytes.
 \end{itemize}
 
+\section{Component implementations}
+
 \subsection{Memory space management}\label{subs:mem_architecture}
 Explain how a packet will always be stored contiguously in 
-
-\subsection{}
-
-\section{Component implementations}
 
 \subsection{Pipelined architecture}
 
