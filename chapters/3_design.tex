@@ -1,0 +1,141 @@
+\chapter{Design}\label{ch:design}
+The main part of your thesis. Here you describe your approach to solve
+the problem you stated in the Introduction.  Be as general as possible.
+
+\section{Context} % Where does the design live?
+As stated in the instroducton \cref{ch:introduction} the potato
+
+These are the hard requirements:
+\begin{itemize}
+  \item Support over X active flows at any time
+  \item Generation size from 8 to 64
+  \item Throughput of 100 Gb/s to feed Ethernet MAC
+  \item Latency of under 10us to let FEC encoder dominate
+  \item Configurable number of flows (compile time)
+  \item Configurable generation size (compile time)
+\end{itemize}
+
+These are "nice to haves":
+\begin{itemize}
+  \item Configurable priority of flows (dynamic)
+  \item Configurable generation size (dynamic)
+\end{itemize}
+
+\subsection{Throughput and latency}
+Here we explain that throughput (100Gb/s) and latency (>1us) are the main 
+
+\subsection{Assumptions and constraints}
+Here I should explain the design is only being simulated, that the target is to eventually synthesize it,
+and that there is still work to do to make it usable, mainly adding the configuration stuff. Remark that
+this is mostly the baseline platform to build from. Note that it is very expandable.
+
+\section{System design}
+
+As covered in the background chapter \ref{ch:background}, the design is built with a shared-memory architecture. 
+Figure \ref{fig:overall_system} depicts a high-level architectural view of the system. The subsequent 
+sections break down the different stages roughly following the order of the data path.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=1\textwidth]{../img/overall_system.png}
+  \end{center}
+  \caption{Overview of the Packet Buffer}\label{fig:overall_system}
+\end{figure}
+
+\subsection{Flow ingest}
+This is the first stage in the data path, and its purpose is to allocate the internal resources
+to the incoming flows, and tracking the state of said flows. This functions are split into three 
+different modules:\\
+
+\begin{itemize}
+  \item \textbf{Flow ID table}:
+  \item \textbf{Flow metadata table}:
+  \item \textbf{Evict ID queue}:
+\end{itemize}
+
+\subsection{Packet writer}
+
+This stage...
+
+
+\subsection{Packet Descriptor and Free Memory queues}
+
+Packet descriptor queues This stage 
+Free memory queue This stage 
+
+\subsection{Packet reader}
+
+This stage...
+
+
+\subsubsection{Internal vs external memory (HBM usage justification)}
+One of the first questions regarding system dimensions is the amount of required memory. Based on the aforementioned 
+requirements in \ref{system_requirements}, we would like to support a generation size of 64
+and at least 128 concurrent active flows. Assuming a worst case size of 1500 bytes per packet, and a packet queue of minimum size
+(64 since we have to buffer at least as many packets as needed by the generation size); the resulting minimum memory is 12.288 MB
+assuming perfectly efficient memory usage as seen in the calculation below.
+
+\[
+\begin{aligned}
+\text{Memory}
+&= 64\,\frac{\text{packets}}{\text{flow}}
+\times 128\,\text{flows}
+\times 1500\,\frac{\text{bytes}}{\text{packet}} \\[4pt]
+&= 12{,}288{,}000\,\text{bytes} \\[4pt]
+&= \frac{12{,}288{,}000}{10^6}\,\text{MB} \\[4pt]
+&= \boxed{12.288\,\text{MB}}
+\end{aligned}
+\]
+According to the product page of the Alveo U55C board \cite{amd_alveo_u55c}, the total SRAM capacity is roughly 42 MB, of which only
+around 33 come from the denser UltraRam memory in Xilinx FPGAs. Since the goal of this design is to be potentially scalable to handle
+hundreds of concurrent flows in the future, building around such a limited pool of storage is not acceptable. \\
+
+Moreover, the memory is distributed across the FPGA fabric, and assembling it all together would likely require an internal network
+that would also use a high amount of resources and greatly increase system complexity.\\
+
+Because of this, the logical decision is to make use of the external memory of the FPGA, which in the U55C's case is the 16 GB worth
+of HBM.
+
+
+\subsubsection{Coherency and consistency}
+
+In computer science and multi-core hardware, coherence ensures that all processors see the latest
+written value for a single specific memory address, and consistency defines the global order
+in which read and writes across different memory addresses appear to execute for all processors.\\
+
+The proposed design does not contain any traditional processor cores, however it does contain two
+modules (the packet reader and packet writer) that issue and handle multiple in-flight requests each,
+raising the question about how to guarantee the coherency and consistency.\\
+
+Thankfully, one of the biggest advantages of a shared-memory architecture is that the free memory and packet
+queues guarantee that a packet descriptor can only be at one place at any given time: it is either
+being processed in the write or read engine, or stored in one of the queues. This ensures that there can only
+be exactly one request in flight (either a read or a write) for every memory address at any time.\\
+
+In summary, as long as the write and read engines only pop and push to the queues only when memory
+transactions have been completed, coherency and consistency are guaranteed.\\
+
+
+% \subsection{System architecture}
+% Add diagram of whole system, say that it looks like a shared memory system etc...
+%
+% Give a short walk through the datapath and say it will be elaborated later on.
+%
+% \subsection{Memory architecture}
+% Super duper diagram indicating that we use a 
+%
+% \subsection{Flow ingest}
+% Diagram + explanation of this stage.
+%
+% \subsection{Chunk ingest (packet writer)}
+% Diagram + explanation of this stage.
+%
+% \subsection{Packet reader}
+% Diagram + explanation of this stage.
+%
+% \subsection{Packet and memory queues}
+% Diagram + explanation of this stage.
+
+\section{Previous HBM architecture}\label{sec:prev_hbm_arch}
+Here I can speak (if William finds it appropriate) about the previous architecture without axi stream, since I already have the diagrams.
+

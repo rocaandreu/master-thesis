@@ -1,17 +1,378 @@
-\chapter{(Prototype) Implementation}
-In many cases, you implemented your approach in some way. In this
-chapter, you explain your implementation.  Usually you can't explain
-every detail. The source code that you submit already contains the tiny
-details of your implementation: you can skip them in the
-description. Instead, focus on what was hard why you implemented it in a
-particular way, not how you implemented it
+\chapter{Implementation}\label{ch:implementation}
+% In many cases, you implemented your approach in some way. In this
+% chapter, you explain your implementation.  Usually you can't explain
+% every detail. The source code that you submit already contains the tiny
+% details of your implementation: you can skip them in the
+% description. Instead, focus on what was hard why you implemented it in a
+% particular way, not how you implemented it
 
-\section{Systemverilog implementation}
-Here I can speak about how it all is synthesizable and that Questa SIM was used to simulate the system.
+\section{Context, tools and environment}
+Before delving into the specifics of the implementation, this section aims to provide the necessary context 
+about the hardware platform and software tools used to develop and evaluate the design. 
+%It introduces the FPGA-based Alveo U55C platform and the OpenNIC framework, which provide the underlying hardware and networking infrastructure, followed by the development and synthesis tools used to implement, simulate, and test the design. Together, these components define the development environment in which the proposed solution is designed and evaluated.
 
-\section{Testbench and simulation environment}
+\subsection{Systemverilog implementation}
+Firstly, it is worth mentioning the design has been written entirely in Systemverilog
+using the synthesizable subset of the language detailed in \cite{sutherland2006synthesizable} for the RTL modules.
+The same language has been used to write the testbench and evaluation environment.
+
+\subsection{Software tools}
+The main development, including functional simulations and debugging have been performed 
+using Questa Sim 2023.4. For the out-of-context synthesis flow, Xilinx Vivado 2023.3 was used.
+
+\subsubsection{Duck EDA wrapper}
+As a side note, it is worth mentioning that a Python-based EDA wrapper was developed to simplify and 
+streamline the tasks conducted in this thesis. It allows to easily configure different tests, 
+compilation configurations, and synthesis parameters using YAML configuration files. Its modular design 
+also makes it straightforward to extend with additional tools and functionalities in the future if necessary. 
+More details can be found in the corresponding appendix.
+
+\subsection{Xilinx Alveo U55C}\label{u55c}
+
+Previously it was already  mentioned that the design is based on the AMD Alveo U55C. This section aims to give 
+a brief overview of its main characteristics. Further details can be found in the official product Specification \cite{amd_alveo_u55c}. \\
+
+It is an FPGA accelerator card based on the Virtex UltraScale+ XCU55C device, and particularly suited to high-throughput 
+applications because it combines a large pool of FPGA resources with 16 GB of HBM2 providing 460 GB/s of memory 
+bandwidth and two QSFP28 ports supporting up to 100 Gb/s each. The card connects to the host through PCIe Gen3 x16 
+or dual Gen4 x8, making it suitable for applications involving both high-speed networking and data movement 
+between the host and FPGA.
+
+\begin{table}[ht]
+    \centering
+    \begin{tabular}{ll}
+        \hline
+        \textbf{Characteristic} & \textbf{Specification} \\
+        \hline
+        FPGA & Xilinx/AMD Virtex UltraScale+ XCU55C \\
+        LUTs & 1.304 M \\
+        Registers & 2.607 M \\
+        DSP slices & 9,024 \\
+        BRAM & 1,968 $\times$ 36 Kb (70.9 Mb) \\
+        URAM & 960 $\times$ 288 Kb (270 Mb) \\
+        HBM2 capacity & 16 GB \\
+        HBM2 bandwidth & 460 GB/s \\
+        Network interfaces & 2 $\times$ QSFP28, up to 100 Gb/s each \\
+        PCIe interface & Gen3 $\times$16 or 2 $\times$ Gen4 $\times$8 \\
+        Thermal design power & 115 W \\
+        Cooling & Passive \\
+        \hline
+    \end{tabular}
+    \caption{Relevant characteristics of the AMD Alveo U55C accelerator card.} \label{tab:u55c_specs}
+\end{table}
+
+\subsection{Open-Nic Project Overview}\label{open-nic}
+The OpenNIC project \cite{amd_opennic} is an open-source, FPGA-based network interface card (NIC) platform developed by Xilinx.
+It provides a programmable hardware architecture for high-performance networking, including a configurable
+NIC shell, Linux kernel driver, and DPDK support. It is designed to allow developers to implement
+and evaluate custom networking functions directly on an FPGA, and it is the platfrom in which
+the design is aimed to be integrated in the future, together with the FEC encoder and the eventual
+RX packet buffer and FEC decoder. \\
+
+As shown in As shown in \ref{fig:open_nic_shell}, 
+the platform offers two slots in the data path to add custom user plugins (i.e. custom modules): the 250 MHz and 
+the 325 MHz box. The main architectural difference between the two is that the 325 MHz box is directly connected 
+to the CMAC interface, which does not allow back pressure and forces the developer to attend data to be immediately 
+after receiving it in the RX side, whereas the RX and TX adapters buffer incoming and outgoing packets to provide some 
+margin to the logic in the 250 MHz box. Moreover, the lower frequency provides more freedom in the timing side 
+for the design, hence both the FEC encoder and packet buffer are built inside the 250 MHz box.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=1\textwidth]{../img/open_nic_shell.png}
+  \end{center}
+  \caption{OpenNIC Shell architecture (source \cite{amd_opennic}.)}\label{fig:open_nic_shell}
+\end{figure}
+
+
+\subsection{FEC encoder}
+Brief introduction, give some specifics about the FEC encoder that follows the buffer.
+I have to cover specifically the latency. Interface defined in \ref{interface_definition}
+
+\section{System requirements}\label{system_requirements}
+Based on the context given in the last section, reference the numbers of latency and throughput we should 
+aim to maintain to keep the max throughput of the AXI interface (and therefore the MAC).
+
+
+\subsection{Development and simulation}
 Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do.
 
-\subsection{Duck EDA tool wrapper}
+\subsection{Synthesis flow}
+Out of context synthesis tools (basically vivado)
+
+\subsection{Duck EDA tool wrapper integration}
 Maybe unnecessary, but we could mention we developed a cool expandable EDA tool wrapper that helps compile,
 simulate and synthesize the design.
+
+\section{Initial decisions and sizing}
+
+Before covering the actual inner workings of the modules, it is important to delve into the characteristics of the intefaces and HBM we are working with.
+
+\subsection{Main input and output interfaces (AXI Stream bus)}\label{interface_definition}
+
+From an outside perspective, the packet buffer can be thought as a pipeline where the received data is eventually
+emitted on the other side, only reordered. Hence, it is only natural that the interfaces are the same in the input and
+output sides.\\
+
+In the previous section detailing the Open-Nic project architecture \ref{open-nic},
+provides the data signals of an AXI-3 Stream bus as the interface with the plugins in the 250 MHz box.
+The following table \ref{tab:axi_stream_signals} details said interface, 
+which is common to the input side of the FEC encoder and the packet buffer. The output side of the packet buffer is the mirrored version,
+where the direction in/out direction inverted.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lccp{8cm}}
+\hline
+\textbf{Signal} & \textbf{Width} & \textbf{Direction} & \textbf{Description} \\ \hline
+tdata  & 512 & in  & Main data signal. \\
+tvalid & 1   & in  & Validates the current tdata value. \\
+tkeep  & 64  & in  & Write strobe for the tdata beat. Technically unneeded as the CMAC does not support partial writes. \\
+tlast  & 1   & in  & Pulse indicating the last beat of a burst transaction. \\
+tready & 1   & out & Ready signal from the receiving side. \\ \hline
+\end{tabular}
+\caption{AXI-Stream interface signals.}
+\label{tab:axi_stream_signals}
+\end{table}
+
+On another note, the clock frequency for the design is 250 MHz as defined in the Open-Nic project. Given the data with of the interface is 512 bits, 
+this gives a maximum theoretical throughput of 128 Gb/s, which is close to the 100 Gb/s maximum the Ethernet MAC can sustain but provides a certain
+freedom to have some idle cycles without compromising the maximum throughput of the SmartNiC.
+
+\[
+\text{Throughput}
+= 512\,\frac{\text{bits}}{\text{cycle}}
+\times 250\times10^6\,\frac{\text{cycles}}{\text{second}}
+= 128\times10^9\,\frac{\text{bits}}{\text{second}}
+= \boxed{\text{128}\,\text{Gbit/s}}
+\]
+
+\subsection{HBM Controller operation mode}
+
+The HBM is accessed via the \textit{AXI High Bandwidth Memory Controller LogiCORE IP} \cite{amd_pg276_axi_hbm} provided by Xilinx with their HBM capable boards.
+Most of the architectural decisions are based on working around its characteristics. \\
+
+\begin{itemize}
+  \item \textbf{Fixed address mode}: Each AXI interface is directly associated with a specific HBM pseudo-channel, and the address
+    range of an AXI port therefore maps directly to its assigned pseudo-channel, avoiding the need for internal crossbar routing.
+    This provides a predictable memory access path with relatively low latency and minimal routing overhead. Particularly, the
+    latency for both read and write requests varies from 90 to 108 memory cycles depending on whether the accessed page was already active.
+    Naturally, the available memory bandwidth must be managed manually by distributing traffic across the AXI ports and their
+    corresponding pseudo-channels.
+
+  \item \textbf{Crossbar mode}: Each AXI interface can access the full HBM address space, allowing transactions to be dynamically
+    routed to any HBM pseudo-channel through the internal crossbar. This provides greater flexibility in how memory is
+    allocated and accessed, as individual AXI ports are not restricted to a single pseudo-channel. Nonetheless, the
+    additional routing through the crossbar introduces extra latency and contention when multiple AXI interfaces access
+    the same pseudo-channel. A crucial factor in this mode is that according to AMD the latency is unbounded.
+\end{itemize}
+
+Given that the requirements \ref{system_requirements} list a bounded latency of under 10 $\mu$s,
+the fixed address mode is more suitable. Furthermore, the architecture already statically distributes flows across the available
+memory channels, meaning that the reduced addressing flexibility of fixed address mode does not impose a concerning management workload.
+
+\subsection{HBM Controller AXI interface decisions and configuration}
+This section outlines the key high-level architectural and sizing decisions made in the design. These choices establish 
+the overall resource requirements and system structure, providing the foundation for the more detailed implementation 
+decisions discussed in subsequent sections.
+
+\subsubsection{Raw throughput considerations and required pseudo-channels}
+Having seen the interface specifications in \cite{amd_pg276_axi_hbm}, the first question that arises is how to
+address the mismatch of data width: every HBM AXI port (or HBM pseudo-channel) is 256 bits wide, whereas the input and outputs of
+the packet buffer is 512 bits wide.\\
+
+On paper every port offers a duplex throughput of 256 bits per cycle, i.e. it can sustain 256 bits per cycle on
+the write and read sides. Therefore, to achieve an aggregate 512 bit datapath, at least two pseudo-channels operating in parallel are needed.\\
+
+That being said, it is crucial to consider that the AXI interface can work at up to 450 MHz. This makes it technically possible to maintain 
+the 100 Gbit/s target throughput with only one pseudo-channel as shown in the calculation, specifically, a single 256-bit AXI port operating at 450 MHz 
+provides a theoretical throughput of 115.2Gbit/s, which is sufficient to meet the 100Gbit/s target. \\
+
+\[
+\begin{aligned}
+R_{\mathrm{max}}
+&= 256\,\frac{\mathrm{bits}}{\mathrm{cycle}}
+\times 450\times10^6\,\frac{\mathrm{cycles}}{\mathrm{s}} \\[4pt]
+&= 115.2\times10^9\,\frac{\mathrm{bits}}{\mathrm{s}} \\[4pt]
+&= \boxed{115.2\,\mathrm{Gbit/s}}
+\end{aligned}
+\]
+
+\[
+\frac{R_{\mathrm{target}}}{R_{\mathrm{max}}}
+=
+\frac{100\,\mathrm{Gbit/s}}{115.2\,\mathrm{Gbit/s}}
+=
+\boxed{86.8\%}
+\]
+
+However, operating the AXI interface at 450 MHz requires clock-domain crossing (CDC) when interfacing with the 250 MHz processing logic, introducing 
+additional buffering and synchronization complexity. Alternatively, two 256-bit AXI ports operating at 250 MHz provide a combined 
+theoretical throughput of 128Gbit/s without requiring CDC between the processing logic and the HBM interfaces. Although this approach 
+uses an additional AXI port, it provides sufficient throughput margin while keeping the clocking and data path architecture simpler and 
+more deterministic.\\
+
+Therefore, the two-port, 250 MHz configuration was selected to avoid the additional complexity and potential latency 
+associated with CDC while still comfortably satisfying the 100Gbit/s throughput requirement. Further considerations and potential characteristics
+of a CDC approach are discussed in \ref{ch:discussion}.
+
+\subsubsection{AXI Interface "splitting"}
+It is frequent to think of AXI ports as a monolithic grouping of the 5 channels described in \cite{arm_axi_channel_signals}.
+This is a fairly natural line of thinking considering that, for example, a traditional processor core will need write and
+read access to main memory.\\
+
+However, one of the advantages of the channel design in the AXI protocol is that it is split into independent 3 write (AW, W, B)
+and 2 read (AR, R) channels, meaning that rather than being thought as a single read/write interface or port, it can be interpreted
+as two independent ones: a read port and a write port. \\
+
+Bringing this observation to our design, it is logical to assign the write-related channels to the packet writer and the
+read-related ones to the packet reader, as these modules will only ever send write and read requests respectively. This is illustrated in figure \ref{fig:axi_channel_split}.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.55\textwidth]{../img/axi_channel_split.png}
+  \end{center}
+  \caption{AXI Channel splitting into write and read sides (one pseudo-channel example)}\label{fig:axi_channel_split}
+\end{figure}
+
+
+\subsubsection{Latency considerations and HBM memory clock frequency}
+As explained previously and as detailed in \cite{amd_pg276_axi_hbm}, when operating in fixed address mode there is a fixed
+access latency of 108 or 90 memory cycles to access an inactive and active page respectively. It is important to remark
+that it is measured in memory cycles and not AXI port cycles, therefore the following conversion is necessary to obtain
+the maximum latency cycles at 250 MHz.
+
+\[
+\begin{aligned}
+T_{\mathrm{HBM}} &= \frac{1}{900\,\mathrm{MHz}}
+= 1.111\,\mathrm{ns}, \\[4pt]
+T_{\mathrm{open}} &= 90 \times T_{\mathrm{HBM}}
+= 90 \times 1.111\,\mathrm{ns}
+= 100\,\mathrm{ns}, \\[4pt]
+T_{\mathrm{closed}} &= 108 \times T_{\mathrm{HBM}}
+= 108 \times 1.111\,\mathrm{ns}
+= 120\,\mathrm{ns}.
+\end{aligned}
+\]
+
+\[
+\begin{aligned}
+T_{\mathrm{AXI}} &= \frac{1}{250\,\mathrm{MHz}}
+= 4\,\mathrm{ns}, \\[4pt]
+N_{\mathrm{open}} &= \frac{100\,\mathrm{ns}}{4\,\mathrm{ns}}
+= \boxed{25\ \mathrm{AXI\ cycles}}, \\[4pt]
+N_{\mathrm{closed}} &= \frac{120\,\mathrm{ns}}{4\,\mathrm{ns}}
+= \boxed{30\ \mathrm{AXI\ cycles}}.
+\end{aligned}
+\]
+
+This latency can be effectively hidden by maintaining multiple transactions in flight concurrently.
+Rather than waiting for an individual transaction to complete before issuing the next one, the write and read engines can contiguously issue
+independent requests while earlier ones are being handled by the HBM controller. This allows the memory pipeline to remain
+occupied and prevents the access latency from directly limiting the throughput. A quick look at the supported in-flight transactions
+reveals there is enough margin to cover the latency gap, even without resorting to bursts:
+
+\begin{itemize}
+  \item 64 in-flight read transactions
+  \item 32 in-flight read transactions
+\end{itemize}
+
+The use of AXI bursts further improves the ability to hide this latency, as a single transaction transfers multiple data beats
+while occupying only one outstanding transaction slot inside the controller. Moreover, according to the official specification
+\cite{amd_pg276_axi_hbm} burst lengths greater than one are recommended for improved performance, hence the burst approach was
+selected.
+
+\subsubsection{Available storage space}
+The discussion so far covered mainly throughput and latency concerns, however the initial reason behind using the HBM 
+available in the U55C was the storage capacity, so this aspect must also be considered.\\
+
+Anew, referring to the official specification \cite{amd_pg276_axi_hbm} reveals that 512 MB of storage
+are allocated to every pseudo-channel in the Alveo U55C board. Allocating 2KB per packet as described 
+in \ref{subs:mem_architecture} and assuming two pseudo-channels 
+yields a total of 500,000 packets, which is enough to fulfil the requirements by one or two orders of magnitude:
+
+\[
+\begin{aligned}
+\text{Total memory}
+&= 2 \times 512\,\mathrm{MB} 
+&= 1024\,\mathrm{MB}
+\end{aligned}
+\]
+
+\[
+\begin{aligned}
+\text{Number of packets}
+&= \frac{1024\times10^6\,\mathrm{bytes}}
+        {2\times1024\,\mathrm{bytes/packet}}
+&= \boxed{500{,}000\ \mathrm{packets}}
+\end{aligned}
+\]
+
+% Note that we are basing the design in a shared-memory pool system, so we need to figure out the dimmensions of the pool:
+% Speak about interfaces and HBM IP and how they determined the dimensions of the system. The though process 
+% should be like so: NR\_FLOWS * ACTIVE\_FLOWS = ~Tenths/few hundred Megabytes $\rightarrow$ Too large to fit into URAM or BRAM!!!
+% $\rightarrow$ We have to use HBM $\rightarrow$ How many slave ports do we need to maintain throughput? $\rightarrow$ Given in-flight transactions,
+% latency and bus width, at least two. $\rightarrow$ This gives us a total mem pool of 512 MB, which would give us a maximum of 
+% ~300,000 packets (assuming MTU and no fragmentation), enough to have a few hundred packets per flow with 1024 flows, so we good.
+
+\subsubsection{Final HBM controller decisions summary}
+
+After discussing the requirements and configuration of the HBM controller, the following list aims to sum up the most
+relevant aspects and decisions taken.
+
+\begin{itemize}
+  \item 250 MHz AXI clock, the same as the processing logic.
+  \item 2 pseudo-channels, one AXI-Stream port for each.
+  \item 256 bits of data width.
+  \item 25 to 30 cycles of latency.
+  \item Bursts of 1 to 16 beats per AXI transaction.
+  \item Write and read transactions completely parallelized because of the port "splitting" in \ref{fig:axi_channel_split}.
+  \item Pipelined memory access via multiple outstanding AXI transactions.
+\end{itemize}
+
+Other smaller considerations not mentioned in previous discussions are the following:
+
+\begin{itemize}
+  \item No partial write requests allowed, meaning all WSTROBE bits set to 1.
+  \item All memory requests are 32 byte-aligned due to the memory space management described in \ref{subs:mem_architecture}, 
+    meaning the 5 LSB of the requested address set to 0. Added to the fact that packets are aligned in 2KB intervals,
+    it also ensures that only one page is accessed per request due to the maximum of 16 beats per AXI Transaction and 
+    the maximum packet size of 1500 bytes.
+\end{itemize}
+
+\subsection{Memory space management}\label{subs:mem_architecture}
+Explain how a packet will always be stored contiguously in 
+
+\subsection{}
+
+\section{Component implementations}
+
+\subsection{Pipelined architecture}
+
+Explain that the design is fully pipelined and the considerations that arise, e.g. the timeout must take into account what flows are active/inactive.
+Flushing process of inactive flows
+
+\subsection{Flow ingest}
+
+\subsubsection{Flow state protocol description}
+This is a consequence of the pipeline design
+
+\begin{itemize}
+  \item \textbf{Inactive}: That particular flow ID is not being used. Can be inactive inside the evict queue or the vector.
+  \item \textbf{Active}: The ID has been allocated and is currently being used in the WR or RD engine, can't be declared inactive at this point. 
+    This flow has a packet somewhere within the packet writer/reader. In the RD engine this basically means it has been 
+  \item \textbf{Wait}: Flow waiting for new packets in the pkt queue
+  \item \textbf{Flush}: Due to timeout, the packets from that FIFO are being flushed and returned to the free mem queue.
+\end{itemize}
+
+\subsection{Flush controller}
+
+\subsection{Packet writer}
+
+\subsubsection{Write engine}
+
+\subsection{Packet reader}
+
+\subsubsection{Round-robin arbiter}
+
+\subsubsection{Read engine}

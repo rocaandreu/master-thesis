@@ -4,6 +4,8 @@
 
 % --- Add additional packages here using \usepackage{package-name}.
 \usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{cleveref}
 % - Uncomment the following two lines, if compilation takes too long due to tikz pictures; this requires pdflatex to be called with shell-escape / write18 (Overleaf does this automatically)
 %\usetikzlibrary{external}
 %\tikzexternalize[prefix=tikz/]
@@ -50,11 +52,13 @@
 %     and \paragraph{} to structure your thesis.
 
 \include{chapters/1_introduction}
-\include{chapters/2_related_work}
-\include{chapters/3_approach}
+\include{chapters/2_background}
+\include{chapters/3_design}
 \include{chapters/4_implementation}
 \include{chapters/5_evaluation}
-\include{chapters/6_conclusion}
+\include{chapters/6_discussion}
+\include{chapters/7_conclusion}
+\include{chapters/appendix}
 
 
 % --- Bibliography
