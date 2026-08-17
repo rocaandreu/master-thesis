@@ -385,14 +385,140 @@ This is a consequence of the pipeline design
   \item \textbf{Flush}: Due to timeout, the packets from that FIFO are being flushed and returned to the free mem queue.
 \end{itemize}
 
-\subsection{Flush controller}
-
 \subsection{Packet writer}
 
+The packet writer is the stage where the incoming data is written into memory. Here a completely separate control and data paths are created 
+by means of the burst instruction detailed below, which is the intermediate step between packet and actual AXI transactions. \\
+
+Overall, as seen in \ref{fig:packet_writer} this stage is divided into the instruction encoder, which builds the burst instructions for the engines; 
+the write engines themselves, which issue AXI write transactions to the HBM; and the re-oder FIFO, which keeps track of the issue order of 
+packets between the engines. As the engines finish writing, the start address and size of the packet (information provided by the engines) is pushed to the corresponding 
+packet queue (determined by the re-order FIFO).\\
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/packet_writer.png}
+  \end{center}
+  \caption{Packet Writer overview}\label{fig:packet_writer}
+\end{figure}
+
+
+Regarding the burst instructions, when a new packet is provided by the previous stage the encoder calculates how many AXI transactions 
+(and how many beats per transaction) are needed to write the full packet to memory. This is done by inspecting the packet bytes in the IP header, 
+since it is always the same size and at the same offset. Apart from that, based on the head of the free memory FIFO the address of every transaction is computed, and the
+pseudo-channel channel to write to is selected by the LSB of the free memory address. The final format of the instruction can be seen below.\\
+
+As a side note, it is worth mentioning that the majority of the size calculations are fairly inexpenisve in terms of hardware resources, 
+as it is mostly divisions by powers of 2, which can be built simply via bit-shifting the data. \\
+
+% \begin{tikzpicture}
+%     \draw (0,0) rectangle (7,1);
+%     \draw (4.8,0) -- (4.8,1);
+%     \draw (5.8,0) -- (5.8,1);
+%     \draw (6.3,0) -- (6.3,1);
+% 
+%     \node at (2.4,0.5) {\texttt{start\_addr}};
+%     \node at (5.3,0.5) {\texttt{num\_beats}};
+%     \node at (6.05,0.5) {\texttt{is\_last\_burst}};
+%     \node at (6.65,0.5) {\texttt{flow\_id}};
+% \end{tikzpicture}
+
+\[
+\begin{array}{|c|c|c|}
+\hline
+\texttt{start\_addr} & \texttt{num\_beats} & \texttt{is\_last\_burst} \\
+\hline
+34~\text{bits} & 5~\text{bits} & 1~\text{bit} \\
+\hline
+\end{array}
+\]
+
+\begin{itemize}
+    \item \texttt{start\_addr}: Byte address of the burst. The first burst of
+    each packet is 2~KB aligned, while subsequent bursts are 64~B aligned.
+
+    \item \texttt{num\_beats}: Number of 256-bit beats contained in the burst,
+    with a range of 1--16 beats.
+
+    \item \texttt{is\_last\_burst}: Indicates whether the burst is the final
+    burst belonging to the packet.
+\end{itemize}
+
+On the data side, the LSB of the head of the memory FIFO selects which write engine to push the data to. When a new packet is detected, 
+the selected pseudo-channel (and write engine) changes accordingly. It is important to issue the burst 
+instruction right when the first beat of the packet arrives from the previous stages, this way the AXI transaction can be streamed immediately 
+rather than having to wait for the full packet to arrive. This approach does not only streamline the latency by avoiding stall cycles while the 
+packet arrives, but it also greatly reduces resource usage as there is no need to buffer an entire package before starting to write it to the HBM.\\
+
+Having two write engines operating at the same time opens the door to potential order violations, hence a mechanism to track packet 
+issue order is necessary. As an example, let us say packet A and B belong to the same flow and arrive in that order. A is issued to 
+pseudo-channel 0 and B to pseudo-channel 1, and also B is notably smaller than A. If there is backpressure on pseudo-channel 0 
+(due to previous in-flight writes for example) it is highly probable that B will be fully written before A, so B would be pushed 
+to the packet queue before A, therefore violating packet arrival order. \\
+
+In order to prevent this, the re-oder FIFO tracks which is the next channel to expect a packt from, and which packet queue it is 
+meant to be pushed to. It is worth mentioning that currently it is assumed that packet writes will be completed in the same order 
+as they were issued (the write engines use the same AXI ID in all transactions to enforce it). \\
+
+In summary, when a new packet arrives the packet writer assigns it a pseudo-channel, encodes the AXI burst instructions for the 
+corresponding write engine, and pushes an entry to the re-oder FIFO to track the new outstanding write. Once the engine is finished, 
+the packet is pushed to the flow packet FIFO. \\
+
 \subsubsection{Write engine}
+Figure \ref{fig:write_engine} contains an architectural overview of the packet writer: when the 
+burst instruction is issued by the packet writer, the push to the FIFO triggers the AW channel logic to issue a new transaction. Once the handshake 
+occurs in that channel, the W channel logic activates, sending as many beats of data as indicated in the burst instruction. It is important to 
+remark that the chunk FIFO is pushed two entries at a time (each entry is 256 bits wide), but every AXI beat just pops one entry. This means the read speed is 
+only half of the write speed, hence why there are two engines present. \\
+
+Once all the beats are sent, a new entry is pushed to the pending packet FIFO. This second queue tracks transactions which have been correctly issued but 
+are not yet completed, and decouples the request and response sides. This means that the current burst instruction can be popped as it has been 
+already processed without having to wait for the AXI response, therefore creating an AXI transaction pipeline. \\
+
+Once the AXI response is received, the pending transaction is popped from the queue. Then the B channel logic is tasked with re-building the packet 
+metadata (base address and total 512-bit chunks) that will be pushed to the packet queues by re-counting what transactions were part of the same 
+packet and how many total beats were issued. Once this information is re-built, it is pushed into the completion FIFO, which will be popped by the 
+packet writer to finally push the entry into the corresponding queue.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=1\textwidth]{../img/write_engine_diagram.png}
+  \end{center}
+  \caption{Write engine overview}\label{fig:write_engine}
+\end{figure}
+
 
 \subsection{Packet reader}
 
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/packet_reader.png}
+  \end{center}
+  \caption{Packet reader overview}\label{fig:packet_reader}
+\end{figure}
+
+\subsubsection{Flush controller}
+Currently, only flows with a number equal or greater than the encoder's generation size can be issued by the 
+arbiter to be read from the HBM. Ideally, remaining packets would be padded with dummy data and sent to 
+the encoder, but this mechanism has not been implemented yet. In its place, a placeholder flush controller has been implemented, 
+whose only task is to feed stale packet addresses back to the free memory queue. \\
+
+The flush controller is a simple FSM that receives instructions directly from the flow scoreboard. It receives a flow ID, 
+which indicates what queue should be flushed and a valid pulse which signals the start of the process. Once given the 
+signal to start, it pops one packet entry per cycle and pushes the start address to the free memory queue. The free 
+memory queue has only a single write port, so either the flush controller or the engines can write to it at once. 
+For this design, the selected approach has been to prioritize the main data flow, relegating the flush controller to 
+push to the queue only when the engines are not.
+
 \subsubsection{Round-robin arbiter}
 
+
 \subsubsection{Read engine}
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/read_engine_diagram.png}
+  \end{center}
+  \caption{Read engine overview}\label{fig:read_engine}
+\end{figure}
+
