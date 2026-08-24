@@ -6,6 +6,9 @@
 % description. Instead, focus on what was hard why you implemented it in a
 % particular way, not how you implemented it
 
+This chapter describes the actual deployment of the packet buffer design presented before. The implementation
+follows a pipelined structure, aiming to map the design into a synthesizable and verified system.
+
 \section{Context, tools and environment}
 Before delving into the specifics of the implementation, this section aims to provide the necessary context 
 about the hardware platform and software tools used to develop and evaluate the design. 
@@ -33,7 +36,7 @@ Previously it was already  mentioned that the design is based on the AMD Alveo U
 a brief overview of its main characteristics. Further details can be found in the official product Specification \cite{amd_alveo_u55c}. \\
 
 It is an FPGA accelerator card based on the Virtex UltraScale+ XCU55C device, and particularly suited to high-throughput 
-applications because it combines a large pool of FPGA resources with 16 GB of HBM2 providing 460 GB/s of memory 
+applications because it combines a large pool of FPGA resources with 16 GB of \gls{hbm} providing 460 GB/s of memory 
 bandwidth and two QSFP28 ports supporting up to 100 Gb/s each. The card connects to the host through PCIe Gen3 x16 
 or dual Gen4 x8, making it suitable for applications involving both high-speed networking and data movement 
 between the host and FPGA.
@@ -62,20 +65,20 @@ between the host and FPGA.
 \end{table}
 
 \subsection{Open-Nic Project Overview}\label{open-nic}
-The OpenNIC project \cite{amd_opennic} is an open-source, FPGA-based network interface card (NIC) platform developed by Xilinx.
+The OpenNIC project \cite{amd_opennic} is an open-source, FPGA-based network interface card (\gls{nic}) platform developed by Xilinx.
 It provides a programmable hardware architecture for high-performance networking, including a configurable
-NIC shell, Linux kernel driver, and DPDK support. It is designed to allow developers to implement
+\gls{nic} shell, Linux kernel driver, and DPDK support. It is designed to allow developers to implement
 and evaluate custom networking functions directly on an FPGA, and it is the platfrom in which
-the design is aimed to be integrated in the future, together with the FEC encoder and the eventual
-RX packet buffer and FEC decoder. \\
+the design is aimed to be integrated in the future, together with the \gls{fec} encoder and the eventual
+RX packet buffer and \gls{fec} decoder. \\
 
 As shown in As shown in \ref{fig:open_nic_shell}, 
 the platform offers two slots in the data path to add custom user plugins (i.e. custom modules): the 250 MHz and 
 the 325 MHz box. The main architectural difference between the two is that the 325 MHz box is directly connected 
-to the CMAC interface, which does not allow back pressure and forces the developer to attend data to be immediately 
+to the \gls{cmac} interface, which does not allow back pressure and forces the developer to attend data to be immediately 
 after receiving it in the RX side, whereas the RX and TX adapters buffer incoming and outgoing packets to provide some 
 margin to the logic in the 250 MHz box. Moreover, the lower frequency provides more freedom in the timing side 
-for the design, hence both the FEC encoder and packet buffer are built inside the 250 MHz box.
+for the design, hence both the \gls{fec} encoder and packet buffer are built inside the 250 MHz box.
 
 \begin{figure}
   \begin{center}
@@ -85,18 +88,31 @@ for the design, hence both the FEC encoder and packet buffer are built inside th
 \end{figure}
 
 
-\subsection{FEC encoder}
-Brief introduction, give some specifics about the FEC encoder that follows the buffer.
-I have to cover specifically the latency. Interface defined in \ref{interface_definition}
+\subsection{\gls{fec} encoder}
+% Brief introduction, give some specifics about the \gls{fec} encoder that follows the buffer.
+% I have to cover specifically the latency. Interface defined in \ref{interface_definition}
 
-\subsection{Testbench architecture}
-Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do.
+Since no final implementation of the \gls{fec} encoder is currently available, it is modelled as an abstract entity for the purposes of this design, 
+following the interface defined in \ref{interface_definition}. The encoder 
+is assumed to consume packets in groups corresponding to the configured generation size, with all packets within a generation 
+belonging to the same flow. This abstraction allows the remainder of the architecture to be evaluated without depending on the internal 
+implementation or timing characteristics of the encoder. \\
+
+The \gls{fec} encoder is expected to introduce a comparatively large processing latency, potentially in the tens to hundreds of microseconds range. 
+To ensure that this latency dominates the latency budget of the proposed architecture, a target maximum latency of 10 $\mu$s is adopted for the 
+remainder of the system. Thus, the memory access and packet-management components are designed such that their contribution remains small 
+relative to the expected \gls{fec} processing time.\\ 
+
+In practice, the encoder will likely also introduce backpressure when it cannot accept additional 
+packets, and multiple encoder instances could be operated in parallel to increase throughput. However, this parallelism and the resulting 
+encoder backpressure are outside the scope of the current implementation; the present design instead assumes an idealized encoder capable of 
+consuming packets at the required generation rate.
 
 \section{Initial decisions and sizing}
 
 Before covering the actual inner workings of the modules, it is important to delve into the characteristics 
 of the interfaces we are working with to see how they will constraint the implementation, particularly 
-in the case of the HBM controller.
+in the case of the \gls{hbm} controller.
 
 \subsection{Main input and output interfaces (AXI Stream bus)}\label{interface_definition}
 
@@ -105,9 +121,9 @@ emitted on the other side, only reordered. Hence, it is only natural that the in
 output sides.\\
 
 In the previous section detailing the Open-Nic project architecture \ref{open-nic},
-provides the data signals of an AXI-3 Stream bus as the interface with the plugins in the 250 MHz box.
+provides the data signals of an \gls{axi}-3 Stream bus as the interface with the plugins in the 250 MHz box.
 The following table \ref{tab:axi_stream_signals} details said interface, 
-which is common to the input side of the FEC encoder and the packet buffer. The output side of the packet buffer is the mirrored version,
+which is common to the input side of the \gls{fec} encoder and the packet buffer. The output side of the packet buffer is the mirrored version,
 where the direction in/out direction inverted.
 
 \begin{table}[ht]
@@ -121,7 +137,7 @@ tkeep  & 64  & in  & Write strobe for the tdata beat. Technically unneeded as th
 tlast  & 1   & in  & Pulse indicating the last beat of a burst transaction. \\
 tready & 1   & out & Ready signal from the receiving side. \\ \hline
 \end{tabular}
-\caption{AXI-Stream interface signals.}
+\caption{\gls{axi}-Stream interface signals.}
 \label{tab:axi_stream_signals}
 \end{table}
 
@@ -138,9 +154,10 @@ freedom to have some idle cycles without compromising the maximum throughput of 
 \]
 \subsection{HBM Controller IP overview}
 
-The HBM is accessed via the \textit{AXI High Bandwidth Memory Controller LogiCORE IP} \cite{amd_pg276_axi_hbm} provided by Xilinx with their HBM capable boards.
+The \gls{hbm} is accessed via the \textit{AXI High Bandwidth Memory Controller LogiCORE IP} \cite{amd_pg276_axi_hbm} provided by Xilinx with their \gls{hbm} capable boards.
 Most of the architectural decisions are based on working around its characteristics to meet the throughput and latency requirements, and this 
-section provides a very brief summary of the provided features in table \ref{tab:u55c_hbm_overview}. More detailed information can be found in the official product page. \\
+section provides a very brief summary of the provided features in table \ref{tab:u55c_hbm_overview}. 
+More detailed information can be found in the official product page. \\
 
 \begin{table}
     \centering
@@ -167,26 +184,26 @@ section provides a very brief summary of the provided features in table \ref{tab
         Access latency (global addressing) & at least 110 or 128 memory cycles \\
         \hline
     \end{tabular}
-    \caption{Feature overview of the HBM subsystem on the AMD Alveo U55C.}
+    \caption{Feature overview of the \gls{hbm} subsystem on the AMD Alveo U55C.}
     \label{tab:u55c_hbm_overview}
 \end{table}
 
 \subsection{HBM Controller operation mode}
 
-The HBM controller supports two main operation modes that offer a compromise between ease of use and performance and predictability:
+The \gls{hbm} controller supports two main operation modes that offer a compromise between ease of use and performance and predictability:
 
 \begin{itemize}
-  \item \textbf{Fixed address mode}: Each AXI interface is directly associated with a specific HBM pseudo-channel, and the address
-    range of an AXI port therefore maps directly to its assigned pseudo-channel, avoiding the need for internal crossbar routing.
+  \item \textbf{Fixed address mode}: Each \gls{axi} interface is directly associated with a specific \gls{hbm} pseudo-channel, and the address
+    range of an \gls{axi} port therefore maps directly to its assigned pseudo-channel, avoiding the need for internal crossbar routing.
     This provides a predictable memory access path with relatively low latency and minimal routing overhead. Particularly, the
     latency for both read and write requests varies from 90 to 108 memory cycles depending on whether the accessed page was already active.
-    Naturally, the available memory bandwidth must be managed manually by distributing traffic across the AXI ports and their
+    Naturally, the available memory bandwidth must be managed manually by distributing traffic across the \gls{axi} ports and their
     corresponding pseudo-channels.
 
-  \item \textbf{Crossbar mode}: Each AXI interface can access the full HBM address space, allowing transactions to be dynamically
-    routed to any HBM pseudo-channel through the internal crossbar. This provides greater flexibility in how memory is
-    allocated and accessed, as individual AXI ports are not restricted to a single pseudo-channel. Nonetheless, the
-    additional routing through the crossbar introduces extra latency and contention when multiple AXI interfaces access
+  \item \textbf{Crossbar mode}: Each \gls{axi} interface can access the full \gls{hbm} address space, allowing transactions to be dynamically
+    routed to any \gls{hbm} pseudo-channel through the internal crossbar. This provides greater flexibility in how memory is
+    allocated and accessed, as individual \gls{axi} ports are not restricted to a single pseudo-channel. Nonetheless, the
+    additional routing through the crossbar introduces extra latency and contention when multiple \gls{axi} interfaces access
     the same pseudo-channel. A crucial factor in this mode is that according to AMD the latency is unbounded.
 \end{itemize}
 
@@ -201,14 +218,14 @@ decisions discussed in subsequent sections.
 
 \subsubsection{Raw throughput considerations and required pseudo-channels}
 Having seen the interface specifications in \cite{amd_pg276_axi_hbm}, the first question that arises is how to
-address the mismatch of data width: every HBM AXI port (or HBM pseudo-channel) is 256 bits wide, whereas the input and outputs of
+address the mismatch of data width: every \gls{hbm} \gls{axi} port (or pseudo-channel) is 256 bits wide, whereas the input and outputs of
 the packet buffer is 512 bits wide.\\
 
 On paper every port offers a duplex throughput of 256 bits per cycle, i.e. it can sustain 256 bits per cycle on
 the write and read sides. Therefore, to achieve an aggregate 512 bit datapath, at least two pseudo-channels operating in parallel are needed.\\
 
-That being said, it is crucial to consider that the AXI interface can work at up to 450 MHz. This makes it technically possible to maintain 
-the 100 Gbit/s target throughput with only one pseudo-channel as shown in the calculation, specifically, a single 256-bit AXI port operating at 450 MHz 
+That being said, it is crucial to consider that the \gls{axi} interface can work at up to 450 MHz. This makes it technically possible to maintain 
+the 100 Gbit/s target throughput with only one pseudo-channel as shown in the calculation, specifically, a single 256-bit \gls{axi} port operating at 450 MHz 
 provides a theoretical throughput of 115.2Gbit/s, which is sufficient to meet the 100Gbit/s target. \\
 
 \[
@@ -229,22 +246,22 @@ R_{\mathrm{max}}
 \boxed{86.8\%}
 \]
 
-However, operating the AXI interface at 450 MHz requires clock-domain crossing (CDC) when interfacing with the 250 MHz processing logic, introducing 
-additional buffering and synchronization complexity. Alternatively, two 256-bit AXI ports operating at 250 MHz provide a combined 
-theoretical throughput of 128Gbit/s without requiring CDC between the processing logic and the HBM interfaces. Although this approach 
-uses an additional AXI port, it provides sufficient throughput margin while keeping the clocking and data path architecture simpler and 
+However, operating the \gls{axi} interface at 450 MHz requires clock-domain crossing (CDC) when interfacing with the 250 MHz processing logic, introducing 
+additional buffering and synchronization complexity. Alternatively, two 256-bit \gls{axi} ports operating at 250 MHz provide a combined 
+theoretical throughput of 128Gbit/s without requiring CDC between the processing logic and the \gls{hbm} interfaces. Although this approach 
+uses an additional \gls{axi} port, it provides sufficient throughput margin while keeping the clocking and data path architecture simpler and 
 more deterministic.\\
 
 Therefore, the two-port, 250 MHz configuration was selected to avoid the additional complexity and potential latency 
 associated with CDC while still comfortably satisfying the 100Gbit/s throughput requirement. Further considerations and potential characteristics
 of a CDC approach are discussed in \ref{ch:discussion}.
 
-\subsubsection{AXI Interface "splitting"}
-It is frequent to think of AXI ports as a monolithic grouping of the 5 channels described in \cite{arm_axi_channel_signals}.
+\subsubsection{\gls{axi} Interface "splitting"}
+It is frequent to think of \gls{axi} ports as a monolithic grouping of the 5 channels described in \cite{arm_axi_channel_signals}.
 This is a fairly natural line of thinking considering that, for example, a traditional processor core will need write and
 read access to main memory.\\
 
-However, one of the advantages of the channel design in the AXI protocol is that it is split into independent 3 write (AW, W, B)
+However, one of the advantages of the channel design in the \gls{axi} protocol is that it is split into independent 3 write (AW, W, B)
 and 2 read (AR, R) channels, meaning that rather than being thought as a single read/write interface or port, it can be interpreted
 as two independent ones: a read port and a write port. \\
 
@@ -255,14 +272,14 @@ read-related ones to the packet reader, as these modules will only ever send wri
   \begin{center}
     \includegraphics[width=0.45\textwidth]{../img/axi_channel_split.png}
   \end{center}
-  \caption{AXI Channel splitting into write and read sides (one pseudo-channel example)}\label{fig:axi_channel_split}
+  \caption{\gls{axi} Channel splitting into write and read sides (one pseudo-channel example)}\label{fig:axi_channel_split}
 \end{figure}
 
 
 \subsubsection{Latency considerations and HBM memory clock frequency}
 As explained previously and as detailed in \cite{amd_pg276_axi_hbm}, when operating in fixed address mode there is a fixed
 access latency of 108 or 90 memory cycles to access an inactive and active page respectively. It is important to remark
-that it is measured in memory cycles and not AXI port cycles, therefore the following conversion is necessary to obtain
+that it is measured in memory cycles and not \gls{axi} port cycles, therefore the following conversion is necessary to obtain
 the maximum latency cycles at 250 MHz.
 
 \[
@@ -280,18 +297,18 @@ T_{\mathrm{closed}} &= 108 \times T_{\mathrm{HBM}}
 
 \[
 \begin{aligned}
-T_{\mathrm{AXI}} &= \frac{1}{250\,\mathrm{MHz}}
+T_{\mathrm{\gls{axi}}} &= \frac{1}{250\,\mathrm{MHz}}
 = 4\,\mathrm{ns}, \\[4pt]
 N_{\mathrm{open}} &= \frac{100\,\mathrm{ns}}{4\,\mathrm{ns}}
-= \boxed{25\ \mathrm{AXI\ cycles}}, \\[4pt]
+= \boxed{25\ \mathrm{\gls{axi}\ cycles}}, \\[4pt]
 N_{\mathrm{closed}} &= \frac{120\,\mathrm{ns}}{4\,\mathrm{ns}}
-= \boxed{30\ \mathrm{AXI\ cycles}}.
+= \boxed{30\ \mathrm{\gls{axi}\ cycles}}.
 \end{aligned}
 \]
 
 This latency can be effectively hidden by maintaining multiple transactions in flight concurrently.
 Rather than waiting for an individual transaction to complete before issuing the next one, the write and read engines can contiguously issue
-independent requests while earlier ones are being handled by the HBM controller. This allows the memory pipeline to remain
+independent requests while earlier ones are being handled by the \gls{hbm} controller. This allows the memory pipeline to remain
 occupied and prevents the access latency from directly limiting the throughput. A quick look at the supported in-flight transactions
 reveals there is enough margin to cover the latency gap, even without resorting to bursts:
 
@@ -300,13 +317,13 @@ reveals there is enough margin to cover the latency gap, even without resorting 
   \item 32 in-flight read transactions
 \end{itemize}
 
-The use of AXI bursts further improves the ability to hide this latency, as a single transaction transfers multiple data beats
+The use of \gls{axi} bursts further improves the ability to hide this latency, as a single transaction transfers multiple data beats
 while occupying only one outstanding transaction slot inside the controller. Moreover, according to the official specification
 \cite{amd_pg276_axi_hbm} burst lengths greater than one are recommended for improved performance, hence the burst approach was
 selected.
 
 \subsubsection{Available storage space}
-The discussion so far covered mainly throughput and latency concerns, however the initial reason behind using the HBM 
+The discussion so far covered mainly throughput and latency concerns, however the initial reason behind using the \gls{hbm} 
 available in the U55C was the storage capacity, so this aspect must also be considered.\\
 
 Anew, considering that 512 MB of storage are allocated to every pseudo-channel, counting 2KB per packet as described 
@@ -339,17 +356,17 @@ yields a total of 500,000 packets, which is enough to fulfil the requirements by
 
 \subsubsection{Final HBM controller decisions summary}
 
-After discussing the requirements and configuration of the HBM controller, the following list aims to sum up the most
+After discussing the requirements and configuration of the \gls{hbm} controller, the following list aims to sum up the most
 relevant aspects and decisions taken.
 
 \begin{itemize}
-  \item 250 MHz AXI clock, the same as the processing logic.
-  \item 2 pseudo-channels, one AXI-Stream port for each.
+  \item 250 MHz \gls{axi} clock, the same as the processing logic.
+  \item 2 pseudo-channels, one \gls{axi}-Stream port for each.
   \item 256 bits of data width.
   \item 25 to 30 cycles of latency.
-  \item Bursts of 1 to 16 beats per AXI transaction.
+  \item Bursts of 1 to 16 beats per \gls{axi} transaction.
   \item Write and read transactions completely parallelized because of the port "splitting" in \ref{fig:axi_channel_split}.
-  \item Pipelined memory access via multiple outstanding AXI transactions.
+  \item Pipelined memory access via multiple outstanding \gls{axi} transactions.
 \end{itemize}
 
 Other smaller considerations not mentioned in previous discussions are the following:
@@ -358,40 +375,109 @@ Other smaller considerations not mentioned in previous discussions are the follo
   \item No partial write requests allowed, meaning all WSTROBE bits set to 1.
   \item All memory requests are 32 byte-aligned due to the memory space management described in \ref{subs:mem_architecture}, 
     meaning the 5 LSB of the requested address set to 0. Added to the fact that packets are aligned in 2KB intervals,
-    it also ensures that only one page is accessed per request due to the maximum of 16 beats per AXI Transaction and 
+    it also ensures that only one page is accessed per request due to the maximum of 16 beats per \gls{axi} Transaction and 
     the maximum packet size of 1500 bytes.
 \end{itemize}
 
 \section{Component implementations}
 
+From the outside perspective, the packet buffer is conceptually a 512-bit wide pipeline that re-oders the incoming packets 
+into groups of generation size. This section covers the implementation of the different components in the pipeline of the 
+packet buffer. It is important to disclaim that all the diagrams and explanations are simplified representations of the 
+internal architecture, omitting many of the intermediate control and backpressure signals with the aim of showing the main 
+control and data flows across the different stages. \\
+
+% Explain that the design is fully pipelined and the considerations that arise, e.g. the timeout must take into account what flows are active/inactive.
+% Flushing process of inactive flows
+
 \subsection{Memory space management}\label{subs:mem_architecture}
-Explain how a packet will always be stored contiguously in 
 
-\subsection{Pipelined architecture}
+Given that the space in \gls{hbm} is orders of magnitude over the actually required storage, it is reasonable to allocate 2KB despite 
+packets being at most 1500 bytes long. Although this leaves a notable amount of memory unused, it also achieves simpler memory addressing logic
+by keeping the lower bits of the address always to 0. In the future, other more efficient schemes (such as fragmentation) can be pursued 
+if total storage becomes a concern.\\ 
 
-Explain that the design is fully pipelined and the considerations that arise, e.g. the timeout must take into account what flows are active/inactive.
-Flushing process of inactive flows
+The two \gls{hbm} pseudo-channels are selected using the LSB of the packet address provided by the free memory queue (in the packet writer's case) 
+or the packet queues (in the packet reader's case). Since memory locations are distributed across the two pseudo-channels, the LSB can be 
+used as a simple deterministic mapping: one value selects the first pseudo-channel, while the other selects the second. \\
+
+This avoids the need for additional channel-selection logic and naturally distributes allocations across the two pseudo-channels, 
+provided that the free-memory addresses are appropriately interleaved. This interleaving is not guaranteed and can lead to slightly unpredictable 
+performance as time goes on. Nonetheless, the natural randomness in packet arrival when it comes to the length of bursts of same-flow 
+packets is expected to keep performance relatively constant. \\
+
+Although potentially obvious, another advantage of this distribution is that packets are contiguously stored in memory and always 
+in the same 4KB page, which provides good access patterns to the \gls{hbm} memory when added to the usage of burst transactions.
 
 \subsection{Flow ingest}
+This flow ingest \ref{fig:flow_ingest} is the first stage in the pipeline; 
+here actual flow tuples are assigned an internal identifier, which determines which queue will store this flow's packet addresses. \\
 
-\subsubsection{Flow state protocol description}
-This is a consequence of the pipeline design
+Since the packet buffer can handle a limited number of concurrent flows, it is necessary to track the state of each one to reallocate 
+the resources to new flows once older ones become inactive. This task is handled by the scoreboard, which contains a small FSM per 
+flow to determine their state. Flows are considered inactive when all its packets have been fed to the encoder are none more are 
+queued anywhere in the pipeline, or after a set amount of time without receiving packets. \\
+
+When a flow is declared inactive by the scoreboard, it will eventually push its allocated identifier to the free ID queue, 
+allowing the tuple table to assign it to a different tuple.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/flow_ingest.png}
+  \end{center}
+  \caption{Flow ingest stage overview}\label{fig:flow_ingest}
+\end{figure}
+
+
+\subsubsection{Tuple table}
+The tuple table is a simple structure that assigns flow tuples to internal IDs. It pops inactive ones from the queue and reports a hit to the 
+scoreboard upon a packet arrival when either its tuple already had an ID assigned, or it is given a new one. \\
+
+For simplicity and predictability, a straightforward dictionary-based structure is used for the tuple table rather than a more scalable hash-based 
+implementation. Although a hash table would provide better scalability for numerous entries, the expected number of active flows in the 
+proposed architecture is right at the edge of being small enough that the additional complexity of hashing, collision handling, and table 
+management is not justified. The dictionary structure therefore provides a simpler implementation and control logic while remaining 
+adequate for the target workload.
+
+\subsubsection{Scoreboard}
+
+Due to the limited number of active flows there is a necessity to internally track the state of all the concurrent flows. Every flow has a 
+slot in the scoreboard where its state is tracked following the state machine in \ref{fig:flow_fsm}. \\
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/flow_fsm.png}
+  \end{center}
+  \caption{Flow state diagram}\label{fig:flow_fsm}
+\end{figure}
+
+A flow is declared active when its first packet arrives and a new ID is allocated to it in the tuple table, and
+every packet arrival within a flow resets its timestamp counter. It can remain in this state indefinitely as long as 
+new packets keep arriving from the QDMA or are being fed to the encoder. When all the packets are in the queues 
+it transitions to the waiting state, where if not selected by the arbiter (due to backpressure or insufficient 
+number of packets) will eventually be declared inactive and its ID will be returned. \\
+
+Due to the pipelined design, there are some sections where a packet is being written or read from memory. To avoid memory hazards, 
+a flow is protected (transitioning it to the active state) when the write or read engine are processing packets associated to it, 
+meaning it can not be declared inactive. This is what the engine counter tracks, i.e. the number of packets in either of the 
+engines, therefore if the counter is not 0 the flow will never transition to the flush state. The counter increases at the exact 
+time a packet enters either the packet reader or writer, and decreases once it exits. Summarizing: \\
 
 \begin{itemize}
-  \item \textbf{Inactive}: That particular flow ID is not being used. Can be inactive inside the evict queue or the vector.
-  \item \textbf{Active}: The ID has been allocated and is currently being used in the WR or RD engine, can't be declared inactive at this point. 
-    This flow has a packet somewhere within the packet writer/reader. In the RD engine this basically means it has been 
-  \item \textbf{Wait}: Flow waiting for new packets in the pkt queue
+  \item \textbf{Inactive}: That particular flow ID is not being used. It can be pushed to the free ID queue.
+  \item \textbf{Active}: The ID is allocated, and an associated packet is currently being processed at the packet reader or writer.
+    %This flow has a packet somewhere within the packet writer or reader. In the RD engine this basically means it has been 
+  \item \textbf{Wait}: The flow has packets queued, but none are in either the packet writer or reader.
   \item \textbf{Flush}: Due to timeout, the packets from that FIFO are being flushed and returned to the free mem queue.
 \end{itemize}
 
 \subsection{Packet writer}
 
 The packet writer is the stage where the incoming data is written into memory. Here a completely separate control and data paths are created 
-by means of the burst instruction detailed below, which is the intermediate step between packet and actual AXI transactions. \\
+by means of the burst instruction detailed below, which is the intermediate step between packet and actual \gls{axi} transactions. \\
 
 Overall, as seen in \ref{fig:packet_writer} this stage is divided into the instruction encoder, which builds the burst instructions for the engines; 
-the write engines themselves, which issue AXI write transactions to the HBM; and the re-oder FIFO, which keeps track of the issue order of 
+the write engines themselves, which issue \gls{axi} write transactions to the \gls{hbm}; and the re-oder FIFO, which keeps track of the issue order of 
 packets between the engines. As the engines finish writing, the start address and size of the packet (information provided by the engines) is pushed to the corresponding 
 packet queue (determined by the re-order FIFO).\\
 
@@ -403,7 +489,7 @@ packet queue (determined by the re-order FIFO).\\
 \end{figure}
 
 
-Regarding the burst instructions, when a new packet is provided by the previous stage the encoder calculates how many AXI transactions 
+Regarding the burst instructions, when a new packet is provided by the previous stage the encoder calculates how many \gls{axi} transactions 
 (and how many beats per transaction) are needed to write the full packet to memory. This is done by inspecting the packet bytes in the IP header, 
 since it is always the same size and at the same offset. Apart from that, based on the head of the free memory FIFO the address of every transaction is computed, and the
 pseudo-channel channel to write to is selected by the LSB of the free memory address. The final format of the instruction can be seen below.\\
@@ -446,9 +532,9 @@ as it is mostly divisions by powers of 2, which can be built simply via bit-shif
 
 On the data side, the LSB of the head of the memory FIFO selects which write engine to push the data to. When a new packet is detected, 
 the selected pseudo-channel (and write engine) changes accordingly. It is important to issue the burst 
-instruction right when the first beat of the packet arrives from the previous stages, this way the AXI transaction can be streamed immediately 
+instruction right when the first beat of the packet arrives from the previous stages, this way the \gls{axi} transaction can be streamed immediately 
 rather than having to wait for the full packet to arrive. This approach does not only streamline the latency by avoiding stall cycles while the 
-packet arrives, but it also greatly reduces resource usage as there is no need to buffer an entire package before starting to write it to the HBM.\\
+packet arrives, but it also greatly reduces resource usage as there is no need to buffer an entire package before starting to write it to the \gls{hbm}.\\
 
 Having two write engines operating at the same time opens the door to potential order violations, hence a mechanism to track packet 
 issue order is necessary. As an example, let us say packet A and B belong to the same flow and arrive in that order. A is issued to 
@@ -458,9 +544,9 @@ to the packet queue before A, therefore violating packet arrival order. \\
 
 In order to prevent this, the re-oder FIFO tracks which is the next channel to expect a packt from, and which packet queue it is 
 meant to be pushed to. It is worth mentioning that currently it is assumed that packet writes will be completed in the same order 
-as they were issued (the write engines use the same AXI ID in all transactions to enforce it). \\
+as they were issued (the write engines use the same \gls{axi} ID in all transactions to enforce it). \\
 
-In summary, when a new packet arrives the packet writer assigns it a pseudo-channel, encodes the AXI burst instructions for the 
+In summary, when a new packet arrives the packet writer assigns it a pseudo-channel, encodes the \gls{axi} burst instructions for the 
 corresponding write engine, and pushes an entry to the re-oder FIFO to track the new outstanding write. Once the engine is finished, 
 the packet is pushed to the flow packet FIFO. \\
 
@@ -468,17 +554,8 @@ the packet is pushed to the flow packet FIFO. \\
 Figure \ref{fig:write_engine} contains an architectural overview of the packet writer: when the 
 burst instruction is issued by the packet writer, the push to the FIFO triggers the AW channel logic to issue a new transaction. Once the handshake 
 occurs in that channel, the W channel logic activates, sending as many beats of data as indicated in the burst instruction. It is important to 
-remark that the chunk FIFO is pushed two entries at a time (each entry is 256 bits wide), but every AXI beat just pops one entry. This means the read speed is 
+remark that the chunk FIFO is pushed two entries at a time (each entry is 256 bits wide), but every \gls{axi} beat just pops one entry. This means the read speed is 
 only half of the write speed, hence why there are two engines present. \\
-
-Once all the beats are sent, a new entry is pushed to the pending packet FIFO. This second queue tracks transactions which have been correctly issued but 
-are not yet completed, and decouples the request and response sides. This means that the current burst instruction can be popped as it has been 
-already processed without having to wait for the AXI response, therefore creating an AXI transaction pipeline. \\
-
-Once the AXI response is received, the pending transaction is popped from the queue. Then the B channel logic is tasked with re-building the packet 
-metadata (base address and total 512-bit chunks) that will be pushed to the packet queues by re-counting what transactions were part of the same 
-packet and how many total beats were issued. Once this information is re-built, it is pushed into the completion FIFO, which will be popped by the 
-packet writer to finally push the entry into the corresponding queue.
 
 \begin{figure}
   \begin{center}
@@ -487,8 +564,18 @@ packet writer to finally push the entry into the corresponding queue.
   \caption{Write engine overview}\label{fig:write_engine}
 \end{figure}
 
+Once all the beats are sent, a new entry is pushed to the pending packet FIFO. This second queue tracks transactions which have been correctly issued but 
+are not yet completed, and decouples the request and response sides. This means that the current burst instruction can be popped as it has been 
+already processed without having to wait for the \gls{axi} response, therefore creating an \gls{axi} transaction pipeline. \\
+
+Once the \gls{axi} response is received, the pending transaction is popped from the queue. Then the B channel logic is tasked with re-building the packet 
+metadata (base address and total 512-bit chunks) that will be pushed to the packet queues by re-counting what transactions were part of the same 
+packet and how many total beats were issued. Once this information is re-built, it is pushed into the completion FIFO, which will be popped by the 
+packet writer to finally push the entry into the corresponding queue.
 
 \subsection{Packet reader}
+Needless to say, the packet reader shown in \ref{fig:packet_reader} is the counterpart to the write engine, handling 
+the read side of the HBM memory. \\
 
 \begin{figure}
   \begin{center}
@@ -496,6 +583,26 @@ packet writer to finally push the entry into the corresponding queue.
   \end{center}
   \caption{Packet reader overview}\label{fig:packet_reader}
 \end{figure}
+
+Firstly, the module filters out the flow to be flushed by the flush controller as instructed by the scoreboard, which is keeping track of the state of all the flows 
+in the system. Flushing the flow returns the packet addresses to the free memory queue without reading them from memory, therefore dropping the stored 
+data and freeing the location to be overwritten later by a new packet. \\ 
+
+The rest of flows are fed to the round-robin arbiter, which computes what flows are eligible to be fed to the encoder by counting the number of packets 
+present in the queues. Any flow with a queue containing the generation size number of packets or greater is considered valid.\\
+
+The arbiter then selects a valid flow and pops a generation size worth of packets to feed them to the instruction encoder. The instruction encoder 
+computes the same burst instructions as in the write engine and feeds them to the corresponding read engine, again following the same criteria of using the 
+LSB of the packet address to select the channel. At the same time as the instructions are fed, a new entry is added to the re-oder FIFO. \\
+
+Both read engines contain a queue storing the read data (and indicating packet boundaries with a "last" bit), which are popped to be fed to the \gls{fec} encoder 
+following the order determined by the re-order FIFO. Once a packet is fully streamed to the \gls{fec} encoder, the address is returned to the free memory queue.
+Given that memory transactions are completed in-order, the packets are also guaranteed to be served in order and in groups of generation size belonging to the same flow. 
+Also, the re-oder FIFO tracks the flow ID of the issued packets to decrease the engine counter in the scoreboard later on. \\
+
+Once the arbiter counts up to a generation size worth of packets, the arbitration is restarted, shifting the priority to attend a different flow. It is important 
+to remark that packets are streamed from the queues to the read engine to maintain a pipeline structure, instead of being read and buffered intermediately. \\
+
 
 \subsubsection{Flush controller}
 Currently, only flows with a number equal or greater than the encoder's generation size can be issued by the 
@@ -511,9 +618,18 @@ For this design, the selected approach has been to prioritize the main data flow
 push to the queue only when the engines are not.
 
 \subsubsection{Round-robin arbiter}
+The arbiter in the system follows a round-robin arbitration policy, ensuring that flows are served in a 
+fair and deterministic manner by rotating the priority among the requesting agents. The specific implementation 
+details and algorithm used to realize the round-robin policy are beyond the scope of this work. A detailed description 
+of the underlying algorithm can be found in LaForest’s A Round-Robin Arbiter~\cite{fpgacpu_round_robin_arbiter}.\\
 
+It is worth noting that the implementation of the arbiter allows assigning different priority weights to all the inputs to 
+be arbitrated, meaning that different tiers of priority can be created inside the system to prioritize critical data to 
+be sent first; however, these inputs are not used currently, so all flows have an equal priority as of now. \\
 
 \subsubsection{Read engine}
+The read engine \ref{fig:read_engine} follows a very similar structure to the write engine, 
+pipelining the \gls{axi} requests across the channels.\\
 
 \begin{figure}
   \begin{center}
@@ -522,3 +638,42 @@ push to the queue only when the engines are not.
   \caption{Read engine overview}\label{fig:read_engine}
 \end{figure}
 
+When a burst instruction is pushed to the queue, the AR channel logic checks if there is enough space in the next 
+queues to house the data that will be read from memory. When there is enough space, it issues the read request to the HBM. 
+Once the handshake is completed, it pushes the in-flight request to the pending queue and issue a new read request to keep 
+the transaction pipeline going. \\
+
+The R channel logic then takes the pending requests and the read data from the HBM and feeds it to the chunk FIFO, which 
+will be later popped by the \gls{fec} encoder. In parallel, the start address is pushed to the completion queue once the last beat 
+of the last transaction of a given packet is received. This address is later returned to the free memory queue. \\
+
+In simmetry to the write engine, the chunk FIFO in this case is pushed one 256-bit entry at a time (the width of the HBM \gls{axi} interface data lanes),
+and it is popped 512 bits at a time (the width of the \gls{fec} encoder stream interface).
+
+\subsection{Packet and free memory queues}
+
+As stated in the design chapter \ref{ch:design}, there is one packet queue per flow and a global free memory queue. 
+Despite not being the most scalable solution, for this first version of the design simple single-port flip-flop based FIFOs have been used. \\
+
+Ideally the free memory queue should contain one entry for every packet location available in the system. 
+\[
+N_{\mathrm{entries}}
+=
+N_{\mathrm{flows}}
+\times
+N_{\mathrm{pkt/flow}}.
+\]
+
+For example, with 128 flows and 64 packet buffers allocated per flow, the queue would require:
+\[
+\begin{aligned}
+N_{\mathrm{entries}}
+&=
+128 \times 64 
+&=
+\boxed{8192\ \mathrm{entries}}.
+\end{aligned}
+\]
+Maintaining such a large FIFO is impractical, as it would require thousands
+of entries and introduce significant storage and control overhead. Because of this, the free memory queue is 
+another configuration parameter whose effect will be discussed later on. \\

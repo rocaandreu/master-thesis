@@ -12,7 +12,7 @@ These are the hard requirements:
   \item Support over X active flows at any time
   \item Generation size from 8 to 64
   \item Throughput of 100 Gb/s to feed Ethernet MAC
-  \item Latency of under 10us to let FEC encoder dominate
+  \item Latency of under 10us to let \gls{fec} encoder dominate
   \item Configurable number of flows (compile time)
   \item Configurable generation size (compile time)
 \end{itemize}
@@ -70,7 +70,7 @@ Free memory queue This stage
 This stage...
 
 
-\subsubsection{Internal vs external memory (HBM usage justification)}
+\subsubsection{Internal vs external memory (\gls{hbm} usage justification)}
 One of the first questions regarding system dimensions is the amount of required memory. Based on the aforementioned 
 requirements in \ref{system_requirements}, we would like to support a generation size of 64
 and at least 128 concurrent active flows. Assuming a worst case size of 1500 bytes per packet, and a packet queue of minimum size
@@ -96,7 +96,7 @@ Moreover, the memory is distributed across the FPGA fabric, and assembling it al
 that would also use a high amount of resources and greatly increase system complexity.\\
 
 Because of this, the logical decision is to make use of the external memory of the FPGA, which in the U55C's case is the 16 GB worth
-of HBM.
+of \gls{hbm}.
 
 
 \subsubsection{Coherency and consistency}
@@ -138,6 +138,6 @@ transactions have been completed, coherency and consistency are guaranteed.\\
 % \subsection{Packet and memory queues}
 % Diagram + explanation of this stage.
 
-\section{Previous HBM architecture}\label{sec:prev_hbm_arch}
-Here I can speak (if William finds it appropriate) about the previous architecture without axi stream, since I already have the diagrams.
+% \section{Previous \gls{hbm} architecture}\label{sec:prev_hbm_arch}
+% Here I can speak (if William finds it appropriate) about the previous architecture without axi stream, since I already have the diagrams.
 

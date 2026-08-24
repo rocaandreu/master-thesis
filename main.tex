@@ -6,6 +6,7 @@
 \usepackage{tikz}
 \usepackage{amsmath}
 \usepackage{cleveref}
+\usepackage[acronym]{glossaries}
 % - Uncomment the following two lines, if compilation takes too long due to tikz pictures; this requires pdflatex to be called with shell-escape / write18 (Overleaf does this automatically)
 %\usetikzlibrary{external}
 %\tikzexternalize[prefix=tikz/]
@@ -25,6 +26,9 @@
   AIUsage={literature research, coding, automation}, % comma-separated list of things AI tools were used for; leave unset/empty to omit the AI disclosure
 }
 
+% This needs to be before beggining the document
+\makeglossaries
+
 \begin{document}
 
 \maketitle
@@ -39,8 +43,16 @@
 \makeabstract
 \clearpage
 
+\newacronym{hbm}{HBM}{High Bandwidth Memory}
+\newacronym{cmac}{CMAC}{Gigabit Media Access Control}
+\newacronym{nic}{NIC}{Network Interface Card}
+\newacronym{axi}{AXI}{Advanced eXtensible Interface}
+\newacronym{fec}{FEC}{Forward Error Correction}
+
 % --- Content tables.
 \tableofcontents
+\clearpage
+\printglossary[type=\acronymtype,title={List of Acronyms}]
 \clearpage
 \listoffigures
 \clearpage

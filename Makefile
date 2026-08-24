@@ -4,6 +4,8 @@ OUT  := build
 .PHONY: pdf
 pdf:
 	latexmk -interaction=nonstopmode -outdir=$(OUT) -pdf -halt-on-error $(FILE)
+	makeglossaries -d build main
+	latexmk -interaction=nonstopmode -outdir=$(OUT) -pdf -halt-on-error $(FILE)
 
 .PHONY: watch
 watch:

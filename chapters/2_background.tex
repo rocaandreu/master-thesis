@@ -1,12 +1,64 @@
 \chapter{Background}\label{ch:background}
-Include only work that is addressing the same or a very similar goal as
-yours.  First, explain what the other authors did in their work in your
-own words. Then discuss why you solved the same problem differently.
+% Include only work that is addressing the same or a very similar goal as
+% yours.  First, explain what the other authors did in their work in your
+% own words. Then discuss why you solved the same problem differently.
+%
+% There is plenty of work on network switching and buffer architecture
 
-\section{Related work}
-There is plenty of work on network switching and buffer architecture
+The objective of a packet buffer is to temporarily store incoming packets and organize them by flows so that different consumers 
+can ingest them. Let us consider the case of a network switch as an example where there are many output interfaces operating at the same time and 
+each of them has provides access to a different subset of the network. If packet from flow A and B have to be routed through a different physical 
+interface each to reach their destinations, then an agent needs to separate the flows so that they can be routed accordingly. This is in 
+essence the job of a packet buffer. \\
 
-\subsection{The shared-memory architecture}
-Here we explain the behaviour of a shared-memory architecture for a router/packet buffer.
+Before presenting the proposed design, this section reviews existing approaches described in the literature. 
+Particularly, it covers the shared-memory architecture, which is the industry standard approach to buffering 
+and rerouting packets in a network processor. That being said, there are specific challenges that are unique 
+to the problem described in the introduction chapter \ref{ch:introduction} which will 
+be discussed here as well.
+
+\section{The shared-memory architecture}
+%Here we explain the behavior of a shared-memory architecture for a router/packet buffer.
+As stated previously, there is renowned research on packet buffer architecture \cite{inproceedings} and their application 
+in a specific context, \cite{lau2003gigabit} \cite{naous2008netfpga}. For the purposes of this work, the paper published 
+by Queens University Belfast \cite{inproceedings} is particularly relevant as it defines and implements a generic shared 
+packet buffer design. \\
+
+The proposed design follows a shared-memory architecture in which instead of buffering the packets in a per-flow basis where every flow 
+has its own dedicated memory, a common pool of memory is shared across all of them. Then, logical queues store pointers to the packets 
+stored in the memory, which keeps track of which packets belong to which flow; and a different queue stores pointers to unallocated memory 
+locations. This way, when a packet arrives an unallocated memory location is popped, the data from said packet is written in that region, 
+and the pointer to the region is pushed to the respective flow queue. When a packet needs to be consumed, the inverse process takes place, 
+where a packet address is popped from the respective flow queue, the packet is read, and the memory space (now free) is returned to the 
+unallocated location queue. Figure \ref{fig:shared-buffer} shows 
+an overview of this architectural approach. \\
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/shared-buffer.png}
+  \end{center}
+  \caption{Shared-memory architecture (source \cite{inproceedings})}\label{fig:shared-buffer}
+\end{figure}
+
+All in all, the architecture is essentially a dynamically allocated pool of fixed-size memory blocks combined with logical packet 
+queues and buffer-management pointers, allowing variable-length packets from multiple queues to share the same physical memory. \\
+
+Using descriptor queues instead of buffering packet data directly on a per-flow basis provides better memory utilization and greater flexibility since each flow 
+only maintains a small queue of descriptors containing pointers and metadata for its packets. This allows memory to be dynamically allocated according to the 
+actual traffic demand: a bursty flow can temporarily use more buffer space while idle flows do not waste their allocated capacity. It also naturally supports 
+variable-sized packets, since packets can occupy different numbers of blocks in the shared memory. \\
+
+The descriptor-based approach also separates packet storage from queue management. Pushing or popping a packet mainly involves manipulating small descriptors 
+and pointers rather than moving the packet data itself, which reduces unnecessary data movement and makes flow management easier. Naturally, total memory size also scales better with this approach and facilitates managing a larger number of concurrent flows.
+
+\section{Specific challenges}
+Despite providing a very solid starting point for an implementation, there 
+
+\begin{itemize}
+  \item The papers don't mention specifics handling of active/inactive flows.
+  \item We have only 1 producer and consumer, potentially more consumers in the future.
+  \item No mention of fixed-size stream of output packets needed 
+  \item No specifics on memory access latency to maintain throughput
+\end{itemize}
 
 
