@@ -1,30 +1,149 @@
 \chapter{Evaluation}
-Using the previously presented implementation, you can now evaluate your approach.\\
-Get as many quantitative measurements as possible.  E.g. compare
-different implementations in terms of hardware usage, latency...\\
-This chapter is usually filled with graphs and numbers.  In the end, the
-numbers should show how your approach is better (in some regard) than
-existing approaches.
+% Using the previously presented implementation, you can now evaluate your approach.\\
+% Get as many quantitative measurements as possible.  E.g. compare
+% different implementations in terms of hardware usage, latency...\\
+% This chapter is usually filled with graphs and numbers.  In the end, the
+% numbers should show how your approach is better (in some regard) than
+% existing approaches.
 
+\section{Waveform example}
+
+Say that for demonstration purposes the following image shows a simple case where we are feeding 4 packets with a configured 4 of geneation size. 
+We see that 4 packets are fed in order, and that they are eventually fed tot he encoder. note that the free memory queue and pkt queues are popped 
+and pushed respectively as pkts are being written, specially that the mem queu is popped before the packet fully asrrives to start sending axi requests to hbm from the start.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/pkt_sweep_labeled.png}
+  \end{center}
+  \caption{Simulation waveform}\label{fig:waves}
+\end{figure}
 
 \section{Performance evaluation}
+Briefly explain that in order to verify that the design meets our requierments, we need test the performance of the performance of the buffer (pkt latency and throughout). Remind that all evaluation is done with the assumed config unless said otherwise.
 
 \subsection{Testbench architecture}
-Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do.
+Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do:
+
+It consists of an HBM memory model that has conifgurable latency and in-flight transaction depth both for RD and WR requests;
+a UDP packet generator that can generate packest with parametrizable length and Interleaving between flows. You can also choose how many flows and pkts per flow and interleaving you want them to be sent;
+and also a simple FEC encoder model that simply intakes the data fed from the buffer. Both the FEC encoder, the pkt generator and the HBM use and axi stream interface as described in the implementation chapter
 
 \subsection{Test suite and configs}
 
-Comment the axis of freedom (NR\_FLOWS, GENSIZE, PKT\_FIFO\_LENGTH, MEM\_FIFO\_LENGTH...) and showcase results.\\
+Introduce shortly the 3 sweeps we will do
 
-There will be a table for every cobination of the previous parameters we deem appropriate.
+\subsection{Packet size sweep}
 
-Here are some flow patterns we test with every configuration:
-\begin{itemize}
-  \item Random burst length, small pkts.
-  \item Random burst length, Big pkts.
-  \item Random burst length, Random pkts.
-  \item Long burst length, R andom pkts.
-  \item ...
-\end{itemize}
+The goal of this is to evaluate raw throughout accross different packet sizes. We can see that it does't vary much, 
+and that's good because it means the memory pipeline based on mulitple in-flight requests is working as expected. Latency wise,
+we see the larger packets have slightly higher latency simply because it takes longer to write a bigger packet to memory. \\
+
+We are sending 64 packets per flow accross 16 different flows, with 16 packet burst at random interleavence, with the following variation: 
+- max size (1500B) packets
+- min size (46B)
+- ramdomized (uniform distribution)
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/pkt_sweep_labeled.png}
+  \end{center}
+  \caption{Packet size sweep}\label{fig:pkt_sweep}
+\end{figure}
+
+\subsection{Interleaving sweep}
+
+Here we want to see mainly how latency is affected, the sweep is done 
+We are sendong random size 64 pkts per flow accross 128 flows with different interleaving patterns.
+
+- worst case: iterating over all the flows, sending 1 pkt per flow each time (burst size = 1)
+- best case: send 32 pkts (gensize) iterating over every flow (burst size of 32)
+- ramdomized (uniform distribution)
+
+With the worst case scheme, we have to wait for 128 x 31 x 1500 bytes to be transferred (12.1MB) before giving anything to the encoder. Theoretically is a delay of ~970us
+
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/burst_sweep_labeled.png}
+  \end{center}
+  \caption{Burst size sweep}\label{fig:burst_sweep}
+\end{figure}
+
+\subsection{Configuration sweep}
+
+Here we maintain the proportion of the parameters, but try different values to see how they affect latency. 
+We are sending 64 packets per flow accross 16 different flows. Explain that throughput is roughly similar but that probably the metric that matters the most is the impact of gensize on pkt latency.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/cfg_sweep_labeled.png}
+  \end{center}
+  \caption{Configuration sweep}\label{fig:cfg_sweep}
+\end{figure}
+
+
+\section{Utilization}
+
+To obtain an early estimate of the design's resource cost independently of the surrounding
+Open NIC Shell and HBM IP integration, an out-of-context synthesis of \texttt{packet\_buffer\_top}
+was performed in Vivado using the example configuration of \cref{tab:example-config}
+(generation size 32, 128 flows, a free memory queue depth of 1024, and a per-flow queue depth
+of 64). \\
+
+The diagram in \ref{fig:oob_util} shows the resulting utilization broken down by primitive type. As the
+figure shows, the design is dominated by flip-flop usage: no block RAM (RAMB36/RAMB18), UltraRAM,
+LUTRAM, or SRL resources are used anywhere in the hierarchy, meaning every queue and buffer in
+the design is currently implemented purely as flop-based storage rather than being mapped onto
+dedicated memory primitives. \\
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/util.png}
+  \end{center}
+  \caption{FPGA utilization report}\label{fig:oob_util}
+\end{figure}
+
+
+Table \ref{tab:util-breakdown} decomposes the same synthesis run by pipeline stage, mapping each
+top-level instance in the hierarchical utilization report back onto the stages introduced in
+chapter \ref{ch:design}: flow ingest (\texttt{i\_flow\_ingest}), the packet writer
+(\texttt{i\_chunk\_ingest}, comprising both write-engine instances), the packet descriptor
+queues (the 128 per-flow \texttt{fifo\_sync\_1r1w} instances under \texttt{gen\_pkt\_fifos}),
+the free memory queue (\texttt{i\_mem\_fifo} together with the address-interleaving buffer
+\texttt{pkt\_addr\_ilv\_buf}), and the packet reader (\texttt{pkt\_reader}, comprising both
+read-engine instances and the round-robin arbiter).
+
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lrrrr}
+    \hline
+    Stage & LUTs & \% of total & FFs & \% of total \\
+    \hline
+    Flow ingest                & 7{,}464  & 8.6\%  & 15{,}317  & 6.5\%  \\
+    Packet writer              & 7{,}133  & 8.2\%  & 20{,}922  & 8.9\%  \\
+    Packet descriptor queues   & 53{,}106 & 60.8\% & 150{,}130 & 63.6\% \\
+    Free memory queue          & 5{,}030  & 5.8\%  & 13{,}554  & 5.7\%  \\
+    Packet reader              & 14{,}571 & 16.7\% & 35{,}971  & 15.3\% \\
+    \hline
+    \textbf{Total}             & \textbf{87{,}304} & \textbf{100\%} & \textbf{235{,}895} & \textbf{100\%} \\
+    \hline
+  \end{tabular}
+  \caption{Post-synthesis resource usage by pipeline stage (out-of-context, example configuration)} \label{tab:util-breakdown}
+\end{table}
+
+The packet descriptor queues alone account for roughly 61\% of the design's LUTs and 64\% of
+its flip-flops, which is expected given that this stage instantiates one dedicated queue per
+supported flow (128 in this configuration). More broadly, if every flop-based FIFO instance in
+the design is counted (not only the per-flow packet descriptor queues, but also the smaller
+FIFOs internal to the write and read engines (burst-instruction, chunking, pending-transaction,
+and reassembly FIFOs) and the free memory queue itself) these FIFO primitives together account
+for approximately 220{,}000 flip-flops, or over 90\% of the design's total register count. \\ 
+
+In other words, the large majority of the design's flip-flop usage is not spent on control logic
+at all, but on the flop-based FIFOs used throughout the datapath to hold queue and buffer state;
+this is a direct consequence of the lack of block RAM or UltraRAM inference noted above, and is
+addressed as a resource-optimization opportunity in chapter \ref{ch:implementation}.
 
 

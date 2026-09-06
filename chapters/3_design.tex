@@ -3,39 +3,96 @@ The main part of your thesis. Here you describe your approach to solve
 the problem you stated in the Introduction.  Be as general as possible.
 
 \section{Context} % Where does the design live?
-As stated in the instroducton \cref{ch:introduction} the potato
+As stated in \cref{ch:introduction}, packet-level \gls{fec} protects a flow against loss by
+transmitting redundant, encoded packets alongside the original data. To do so, the encoder
+must operate on a full \emph{generation} of packets belonging to the same flow before it can
+produce repair packets. In a system that serves many concurrent flows at line rate, packets
+of different flows arrive interleaved on a single ingress port, while the encoder consumes
+them per-flow and in fixed-size groups. \\
+
+This mismatch between the arrival order (interleaved,
+per-packet) and the consumption order (per-flow, per-generation) is the central problem this
+design addresses: a packet buffer that decouples packet arrival from encoder consumption by
+storing packets in a shared memory pool and tracking their location with lightweight,
+per-flow queues of descriptors, following the shared-memory architecture introduced in
+\ref{ch:background}. This buffer sits between the ingress packet parser and the \gls{fec}
+encoder in the overall pipeline, and is the sole subject of this thesis; the encoder itself
+and anything downstream of it are outside its scope.
 
 \subsection{System requirements}\label{system_requirements}
-
-These are the hard requirements:
+Based on the context above, the design must satisfy the following requirements:
 \begin{itemize}
-  \item Support over X active flows at any time
-  \item Generation size from 8 to 64
   \item Throughput of 100 Gb/s to feed Ethernet MAC
-  \item Latency of under 10us to let \gls{fec} encoder dominate
-  \item Configurable number of flows (compile time)
-  \item Configurable generation size (compile time)
-\end{itemize}
-
-These are "nice to haves":
-\begin{itemize}
-  \item Configurable priority of flows (dynamic)
-  \item Configurable generation size (dynamic)
+  \item Latency of under 10 $\mu$s to let the \gls{fec} encoder dominate
+  \item Configurable size (from 8 to 64)
+  \item Configurable number of flows
+  \item Configurable generation size
+  \item Configurable queue length (both free memory and flow queues)
 \end{itemize}
 
 \subsection{Throughput and latency}
-Here we explain that throughput (100Gb/s) and latency (>1us) are the main 
+Of the requirements above, throughput and latency are the two that drive the architecture the
+most directly: the buffer must sustain 100 Gbit/s to match the Ethernet
+\gls{cmac} it is fed from, and it must add no more than 10 $\mu$s of latency so
+that the \gls{fec} encoder's own processing time dominates the end-to-end delay budget.\\
 
-\subsection{Assumptions and constraints}
-Here I should explain the design is only being simulated, that the target is to eventually synthesize it,
-and that there is still work to do to make it usable, mainly adding the configuration stuff. Remark that
-this is mostly the baseline platform to build from. Note that it is very expandable.
+The remaining requirements (configurable flow count, generation 
+size, and queue depths) are primarily parameterization choices rather than architectural 
+drivers, and are discussed as such in \cref{subsec:assumptions}. How the design in this 
+chapter is dimensioned and pipelined to meet the throughput and latency targets is detailed 
+further in \cref{ch:implementation}.
+
+\subsection{Assumptions and constraints}\label{subsec:assumptions}
+The design presented in this chapter is validated exclusively through simulation; no
+hardware synthesis, place-and-route, or on-board testing is performed as part of this
+thesis. Consequently, features that are only needed for deployment such as configuration registers, which 
+would expose the configurable parameters at runtime, are considered out of scope and are
+not implemented. \\
+
+Instead, every configurable parameter (flow count, generation size, and
+queue depths) is fixed at elaboration time. The result should therefore be understood as a
+baseline platform that provides a starting point onto which features can later be added 
+without changing the core architecture. That being said, the proposed design can 
+be synthesized as-is and should allow to statically test a future complete SmartNiC system. \\
+
+The design is meant to be fully configurable, but some core decissions require a plausible 
+target workload. TODO: CITE CONC FLOW CNT count Based on measurements reported in the literature, 
+on the order of 30 to 40 flows can be expected to require concurrent \gls{fec} protection at any given time in a
+representative deployment. Using this as a start reference point, the example configuration used
+throughout the rest of this thesis is deliberately chosen on the larger side, in order to
+stress the design: \\
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{ll}
+    \hline
+    Parameter & Value \\
+    \hline
+    Generation size            & 32 \\
+    Number of flows            & 128 \\
+    Free memory queue depth    & 1024 \\
+    Flow (packet) queue depth  & 64 \\
+    \hline
+  \end{tabular}
+  \caption{Example configuration used throughout this thesis}\label{tab:example-config}
+\end{table}
+
+The flow (packet) queue depth of 64 is set to twice the generation size, so that a full
+generation can be accumulated for one flow while the previous generation is still being
+drained by the read engine, without stalling ingest. With 128 supported flows against an
+expected 30 to 40 concurrent flows, the configuration leaves considerable headroom. \\
+
+This configuration also embeds a simplifying assumption: the flow ingest stage
+(\cref{sec:flow-ingest}) currently maps every tracked flow to exactly one dedicated flow
+queue. Supporting more concurrent flows than there are queues (e.g. by having
+several flows share a single queue) is not possible in the current design, but would only require
+extending the tuple table inside flow ingest to map multiple flow IDs onto the same queue
+index; the rest of the datapath is agnostic to this mapping and would not need to change.
 
 \section{System design}
-
 As covered in the background chapter \ref{ch:background}, the design is built with a shared-memory architecture. 
 Figure \ref{fig:overall_system} depicts a high-level architectural view of the system. The subsequent 
-sections break down the different stages roughly following the order of the data path.
+sections break down the different stages roughly following the order of the datapath. \\
 
 \begin{figure}
   \begin{center}
@@ -44,31 +101,79 @@ sections break down the different stages roughly following the order of the data
   \caption{Overview of the Packet Buffer}\label{fig:overall_system}
 \end{figure}
 
-\subsection{Flow ingest}
-This is the first stage in the data path, and its purpose is to allocate the internal resources
+The packet payloads themselves are held in a single pool of \gls{hbm}, shared across all
+flows; none of the control-path stages described below ever move or copy packet data
+directly. Instead, every stage after ingest operates on lightweight descriptors (an
+\gls{hbm} address together with the packet length and its internal flow ID) so that the
+scheduling, queueing, and buffer-management logic can run at a much smaller data width and
+higher effective rate than the 100 Gbit/s packet stream itself.
+
+\subsection{Flow ingest}\label{sec:flow-ingest}
+This is the first stage in the datapath, and its purpose is to allocate the internal resources
 to the incoming flows, and tracking the state of said flows. This functions are split into three 
-different modules:\\
+different modules:
 
 \begin{itemize}
-  \item \textbf{Flow ID table}:
-  \item \textbf{Flow metadata table}:
-  \item \textbf{Evict ID queue}:
+    \item \textbf{Flow ID table}: Maps the tuple identifying an incoming flow to a compact
+    internal flow ID. Every packet that enters the system carries this tuple; rather than
+    propagating it through the rest of the datapath, the flow ID table performs a lookup on
+    ingest and replaces it with a small, fixed-width flow ID that is carried alongside the 
+    descriptor from this point onward. This keeps every downstream structure (scoreboard, 
+    packet queues, packet writer and packet writer) indexed and sized by flow ID 
+    rather than by the much wider original tuple.
+    \item \textbf{Flow metadata table}: Holds the per-flow state needed to service a flow once
+    it has been assigned an ID, indexed by that same flow ID. This includes per-flow state machine 
+    deatiled further in the implementation chapter \ref{ch:implementation}, 
+    and a counter that keeps track of packets inside the packet writer/reader.
+    \item \textbf{Evict ID queue}: A FIFO of flow IDs that are currently free and available
+    for re-assignment. When a new tuple is seen for the first time, an ID is popped from this
+    queue and assigned to it via the flow ID table. when a flow is torn down (evicted) because
+    it has gone idle its ID is pushed back onto this queue, making it available for a future flow.
 \end{itemize}
 
 \subsection{Packet writer}
+This stage takes in each incoming packet, together with the flow ID previously assigned to it, 
+and is responsible for making that packet's payload visible to the rest of the
+system as a descriptor. It first pops a free address from the free memory queue
+(\cref{sec:descriptor-and-free-queues}) and uses it as the destination for the packet in the
+shared \gls{hbm} pool, driving the necessary burst writes over \gls{axi}. \\
 
-This stage...
+Once the write completes, the packet writer assembles a descriptor (the \gls{hbm} address 
+just used, the packet length, and the flow ID) and pushes it onto the packet descriptor queue 
+belonging to that flow. From this point on, the packet writer has no further involvement with the packet:
+it is fully described by its descriptor until it is later read back out by the packet reader.
 
+\subsection{Packet Descriptor and Free Memory queues}\label{sec:descriptor-and-free-queues}
+These two sets of queues implement the address-based bookkeeping that lets the shared
+memory pool be treated as a set of independent per-flow queues, without ever physically
+partitioning the memory itself. \\
 
-\subsection{Packet Descriptor and Free Memory queues}
+\textbf{Packet descriptor queues} are a set of FIFO, one per supported flow, each
+holding the descriptors of the packets belonging to that flow that have been written to
+\gls{hbm} but not yet consumed by the encoder. The packet writer pushes onto the queue
+selected by the packet's flow ID; the packet reader pops from a queue once it has been
+selected for service, in groups of the configured generation size. \\
 
-Packet descriptor queues This stage 
-Free memory queue This stage 
+\textbf{The free memory queue} is a single FIFO, shared across all flows, holding the
+addresses of \gls{hbm} buffer slots that are not currently in use. It is initialized at reset
+with every available address in the shared pool. The packet writer pops one address from it
+per incoming packet, and the packet reader pushes an address back onto it once that packet
+has been forwarded to the \gls{fec} encoder and its buffer slot can be reused. Because this
+queue is shared rather than per-flow, buffer capacity is allocated on demand to whichever
+flows are currently active, instead of being statically divided among all supported flows 
+the central efficiency argument for a shared-memory architecture, as discussed in
+\cref{ch:background}.
 
 \subsection{Packet reader}
-
-This stage...
-
+This stage is responsible for feeding the \gls{fec} encoder with complete generations of
+packets, one flow at a time. An arbiter within the packet reader selects, from among the
+flows whose packet descriptor queue currently holds at least a full generation of entries,
+which flow to service next. Once a flow has been selected, the packet reader pops exactly
+one generation's worth of descriptors from that flow's queue, and for each descriptor issues
+the corresponding \gls{axi} read burst(s) against the address it contains, streaming the
+retrieved payload out towards the \gls{fec} encoder together with its length and flow-ID
+metadata. As each packet finishes being read out, its \gls{hbm} address is returned to the
+free memory queue, making that buffer slot available for a new incoming packet.
 
 \subsubsection{Internal vs external memory (\gls{hbm} usage justification)}
 One of the first questions regarding system dimensions is the amount of required memory. Based on the aforementioned 
