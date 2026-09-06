@@ -1,3 +1,18 @@
 \chapter{Discussion}\label{ch:discussion}
 
-Hello.
+The thing here is that there is not that much to discuss :/, the general vibe is that as long as 
+
+What to mention (to be ordered later)
+
+\begin{itemize}
+  \item Latency depends on input pattern, min packet latency is the actual one that is determined by the buffer
+  \item The utilization can be greatly improved by switching out the fifos for memories, I can also explain that 
+        we access 2 at a time (1 rd 1 wr port) and that this scheme can actually be translated into a memory based module.\\
+        Also, the buffers on the rd engine can also easily be turned into a BRAM based fifo.
+
+  \item Throughput variation, the internal queues in the engines can probably be resized and tweaked to absorb the variation in packet size
+
+  \item Packet dropping: it's probably easy to implement a thing that pads data instead of dropping it
+  \item potentially enabling the crossbar to have all access to all memory from every wr engine
+  \item Tuple table poor scalability, probably better to change into a hash table instead
+\end{itemize}

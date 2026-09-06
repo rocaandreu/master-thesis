@@ -8,41 +8,71 @@
 
 \section{Waveform example}
 
-Say that for demonstration purposes the following image shows a simple case where we are feeding 4 packets with a configured 4 of geneation size. 
-We see that 4 packets are fed in order, and that they are eventually fed tot he encoder. note that the free memory queue and pkt queues are popped 
-and pushed respectively as pkts are being written, specially that the mem queu is popped before the packet fully asrrives to start sending axi requests to hbm from the start.
+Before turning to aggregate performance numbers, it is useful to look at a single, simple
+run of the design to confirm that the datapath behaves as intended. Figure~\ref{fig:waves} shows a
+simulation waveform for a minimal case in which four packets, all belonging to the same flow,
+are fed into the buffer with the generation size configured to four. The four packets are
+written in order and are eventually forwarded to the encoder together, once the full
+generation is available. The waveform also shows the free memory queue and the flow's packet
+descriptor queue being popped and pushed, respectively, as each packet is written: notably,
+the free memory queue is popped -- and the corresponding \gls{axi} write requests to \gls{hbm}
+begin -- before the packet has fully arrived at the write engine, rather than only after the
+whole packet has been buffered locally.
 
 \begin{figure}
   \begin{center}
-    \includegraphics[width=0.95\textwidth]{../img/pkt_sweep_labeled.png}
+    \includegraphics[width=0.95\textwidth]{../img/waves.png}
   \end{center}
   \caption{Simulation waveform}\label{fig:waves}
 \end{figure}
 
 \section{Performance evaluation}
-Briefly explain that in order to verify that the design meets our requierments, we need test the performance of the performance of the buffer (pkt latency and throughout). Remind that all evaluation is done with the assumed config unless said otherwise.
+
+Beyond confirming functional correctness, the design must also be shown to meet the
+requirements set out in Section~\ref{system_requirements}, namely sustaining 100 Gb/s
+of throughput and keeping packet latency low enough that the \gls{fec} encoder itself
+dominates the end-to-end delay. The remainder of this chapter therefore evaluates the buffer
+along these two axes. Unless explicitly stated otherwise, every measurement in this chapter
+uses the example configuration introduced in Section~\ref{subsec:assumptions} (generation size 32,
+128 flows, a free memory queue depth of 1024, and a per-flow queue depth of 64).
 
 \subsection{Testbench architecture}
-Briefly mention the almost UVM-like structure of the testbench, and the stuff it allows us to do:
 
-It consists of an HBM memory model that has conifgurable latency and in-flight transaction depth both for RD and WR requests;
-a UDP packet generator that can generate packest with parametrizable length and Interleaving between flows. You can also choose how many flows and pkts per flow and interleaving you want them to be sent;
-and also a simple FEC encoder model that simply intakes the data fed from the buffer. Both the FEC encoder, the pkt generator and the HBM use and axi stream interface as described in the implementation chapter
+The design is evaluated using an almost UVM-like testbench, built to allow controlled,
+repeatable stimulus generation alongside fine-grained monitoring of the datapath. It consists
+of three main components. A behavioral \gls{hbm} memory model stands in for the physical
+\gls{hbm} subsystem, with independently configurable response latency and in-flight
+transaction depth for both read and write requests, allowing the buffer to be exercised under
+different memory-timing assumptions. A UDP packet generator drives the ingress side of the
+design; it supports parametrizable packet length as well as configurable interleaving between
+flows, letting the number of flows, the number of packets sent per flow, and the interleaving
+pattern between them all be chosen per test. Finally, a simple \gls{fec} encoder model sits on
+the egress side, and simply consumes whatever data the buffer forwards to it, without
+performing any encoding itself. All three components -- the packet generator, the \gls{hbm}
+model, and the encoder model -- communicate with the design under test over the same
+\gls{axi}-Stream interfaces described in Chapter~\ref{ch:implementation}.
 
 \subsection{Test suite and configs}
 
-Introduce shortly the 3 sweeps we will do
+Three sweeps are used to characterize the design's behavior along different axes. The packet
+size sweep  evaluates raw throughput and latency as a function of packet size. The
+interleaving sweep evaluates how the pattern in which packets from different flows
+arrive affects latency. Finally, the configuration sweep  evaluates how scaling the
+design's parameters -- generation size, flow count, and queue depths -- together affects both
+throughput and latency.
 
 \subsection{Packet size sweep}
 
-The goal of this is to evaluate raw throughout accross different packet sizes. We can see that it does't vary much, 
-and that's good because it means the memory pipeline based on mulitple in-flight requests is working as expected. Latency wise,
-we see the larger packets have slightly higher latency simply because it takes longer to write a bigger packet to memory. \\
-
-We are sending 64 packets per flow accross 16 different flows, with 16 packet burst at random interleavence, with the following variation: 
-- max size (1500B) packets
-- min size (46B)
-- ramdomized (uniform distribution)
+The goal of this sweep is to evaluate raw throughput across a range of packet sizes. For this
+test, 64 packets per flow are sent across 16 flows, in bursts of 16 packets at randomly
+interleaved flow order, under three packet-size variations: maximum-size (1500 B) packets,
+minimum-size (46 B) packets, and randomly sized packets drawn from a uniform distribution.
+Figure~\ref{fig:pkt_sweep} shows the results. Throughput does not vary significantly across the
+three cases, which is the expected and desirable outcome: it confirms that the memory
+pipeline, built around multiple outstanding in-flight \gls{hbm} requests, is working as
+intended rather than stalling between requests of different sizes. Latency shows a small but
+consistent increase for larger packets, which follows directly from the longer time needed to
+transfer a larger packet into \gls{hbm}.
 
 \begin{figure}
   \begin{center}
@@ -53,15 +83,35 @@ We are sending 64 packets per flow accross 16 different flows, with 16 packet bu
 
 \subsection{Interleaving sweep}
 
-Here we want to see mainly how latency is affected, the sweep is done 
-We are sendong random size 64 pkts per flow accross 128 flows with different interleaving patterns.
+While the previous sweep focused on throughput, this sweep is aimed primarily at latency: it
+evaluates how the order in which packets from different flows arrive affects the delay before
+a generation becomes available to the encoder. For this test, 64 randomly sized packets per
+flow are sent across 128 flows, under three interleaving patterns: a worst case, in which the
+generator iterates over every flow sending one packet at a time (burst size of 1) before
+returning to the first flow; a best case, in which the generator sends a full generation's
+worth of packets (burst size of 32) to one flow before moving to the next; and a randomized
+case, drawn from a uniform distribution over flows.
 
-- worst case: iterating over all the flows, sending 1 pkt per flow each time (burst size = 1)
-- best case: send 32 pkts (gensize) iterating over every flow (burst size of 32)
-- ramdomized (uniform distribution)
+The worst-case pattern is also the easiest to reason about analytically, and is the only one
+of the three for which a theoretical figure is given here, since it is dramatically larger
+than the other two: for any given flow to complete a generation, the buffer must first receive
+31 more packets from each of the other 127 flows, i.e. \(128 \times 31\) packets, before the
+last packet of the reference flow's generation arrives. At the maximum packet size of 1500 B,
+this amounts to 12.1 MB that must be transferred before the encoder receives anything, which at
+100 Gb/s corresponds to a theoretical delay of approximately
+970 $\mu$s.
 
-With the worst case scheme, we have to wait for 128 x 31 x 1500 bytes to be transferred (12.1MB) before giving anything to the encoder. Theoretically is a delay of ~970us
+The measured results, shown in Figure~\ref{fig:burst_sweep}, remain well below this theoretical
+bound: the worst-case pattern yields an average latency of 116,415 ns and a
+maximum latency of 349,623 ns, while the randomized pattern yields an average
+latency of 37,616 ns and a maximum of 179,779 ns. That the
+measured worst-case latency sits so far below the fully-serial theoretical estimate is
+consistent with the memory pipeline's use of multiple outstanding in-flight requests, discussed
+in Chapter~\ref{ch:implementation}: the 970 $\mu$s figure assumes every intervening
+packet is transferred strictly one after another, whereas in practice several of these
+transfers can be in flight simultaneously.
 
+% \todo{Add the best-case (burst size 32) measured latency numbers here for completeness.}
 
 \begin{figure}
   \begin{center}
@@ -72,8 +122,35 @@ With the worst case scheme, we have to wait for 128 x 31 x 1500 bytes to be tran
 
 \subsection{Configuration sweep}
 
-Here we maintain the proportion of the parameters, but try different values to see how they affect latency. 
-We are sending 64 packets per flow accross 16 different flows. Explain that throughput is roughly similar but that probably the metric that matters the most is the impact of gensize on pkt latency.
+This final sweep keeps the proportions between the design's parameters fixed -- in particular,
+the free memory queue and per-flow queue depths remain sized relative to the generation size
+as in Section~\ref{subsec:assumptions} -- while varying their absolute values, in order to see how
+scaling the design up or down affects performance. As in the packet size sweep, 64 packets per
+flow are sent across 16 flows. Figure~\ref{fig:cfg_sweep} shows that throughput remains roughly
+similar across the swept configurations; the more significant effect is on packet latency,
+where the generation size is the dominant factor, since a packet cannot be forwarded to the
+encoder until its entire generation has been accumulated.
+
+Table~\ref{tab:cfg-sweep} lists the three configurations tested. Each keeps the same ratios as the
+example configuration of Section~\ref{subsec:assumptions}: the free memory queue depth is always 32
+times the generation size, and the flow count is always 4 times the generation size.
+
+\begin{table}[h]
+  \centering
+  \caption{Configurations tested in the configuration sweep}
+  \label{tab:cfg-sweep}
+  \begin{tabular}{lrrr}
+    \hline
+    & Generation size & Flows & Mem.\ queue depth \\
+    \hline
+    Baseline (example config) & 32 & 128 & 1024 \\
+    Half-scale                & 16 & 64  & 512  \\
+    Quarter-scale              & 8  & 32  & 256  \\
+    \hline
+  \end{tabular}
+\end{table}
+
+% \todo{Summarize the resulting throughput and latency numbers for each of the three configurations.}
 
 \begin{figure}
   \begin{center}
@@ -81,7 +158,6 @@ We are sending 64 packets per flow accross 16 different flows. Explain that thro
   \end{center}
   \caption{Configuration sweep}\label{fig:cfg_sweep}
 \end{figure}
-
 
 \section{Utilization}
 
