@@ -1,18 +1,194 @@
 \chapter{Discussion}\label{ch:discussion}
 
-The thing here is that there is not that much to discuss :/, the general vibe is that as long as 
+% The thing here is that there is not that much to discuss :/, the general vibe is that as long as 
+%
+% What to mention (to be ordered later)
+%
+% \begin{itemize}
+%   \item Packet latency depends largely on input pattern and gensize, (e.g. if you wanna buffer 32 pkts per flow, well those packets need to arrive and that takes
+%     a lot of time) min packet latency is the actual one that is determined by the buffer and is within the expected performance in the order of under 10us. Using 
+%     packet latency may not purely represent the system performance because of this.
+%   \item The utilization can be greatly improved by switching out the fifos for memories, I can also explain that 
+%         we access 2 at a time (1 rd 1 wr port) and that this scheme can actually be translated into a memory based module.\\
+%         Also, the buffers on the rd engine can also easily be turned into a BRAM based fifo.
+%
+%   \item Throughput variation, the internal queues in the engines can probably be resized and tweaked to absorb the variation in packet size
+%
+%   \item Packet dropping: it's probably easy to implement a thing that pads data instead of dropping it with the flush controller
+%   \item potentially enabling the crossbar to have all access to all memory from every wr engine
+%   \item Tuple table poor scalability, probably better to change into a hash table instead
+%
+%   \item Mention that the design is able to statically test the full TX path of the future smart nic system, although it's probably more realistic to add slave regs 
+%     (already contempleted in the open nic project) to configure current parameters like generation size and future ones like packet redundancy or flow priority. Also it could be interesting 
+%     to allow different parameters per every flow instead of global ones that apply to all of them, 
+% \end{itemize}
 
-What to mention (to be ordered later)
+The results presented in Chapter~\ref{ch:evaluation} show that, within the example
+configuration used throughout this thesis, the design behaves as expected across every sweep
+performed: throughput stays close to the 100 Gb/s target regardless of packet size, and packet
+latency, while sensitive to how packets arrive, is bounded by mechanisms that can be reasoned
+about analytically. Because of this, there is comparatively little to discuss in the sense of
+unexpected behavior to explain. This chapter instead focuses on what the results actually
+measure, on where the current baseline design falls short of what a deployable system would
+need, and on the concrete changes that would close that gap.
 
-\begin{itemize}
-  \item Latency depends on input pattern, min packet latency is the actual one that is determined by the buffer
-  \item The utilization can be greatly improved by switching out the fifos for memories, I can also explain that 
-        we access 2 at a time (1 rd 1 wr port) and that this scheme can actually be translated into a memory based module.\\
-        Also, the buffers on the rd engine can also easily be turned into a BRAM based fifo.
+\section{Packet latency and throughput dependence on workload}
 
-  \item Throughput variation, the internal queues in the engines can probably be resized and tweaked to absorb the variation in packet size
+The interleaving sweep in the previous chapter showed that packet latency
+varies by close to an order of magnitude between the worst-case, randomized, and best-case
+interleaving patterns, even though the buffer's own configuration was identical in all three cases. \\
 
-  \item Packet dropping: it's probably easy to implement a thing that pads data instead of dropping it
-  \item potentially enabling the crossbar to have all access to all memory from every wr engine
-  \item Tuple table poor scalability, probably better to change into a hash table instead
-\end{itemize}
+This is expected, and it reflects a property of generation-based buffering in general rather 
+than a shortcoming of this particular design, due to the simple fact that a generation can only be performed 
+once all of its packets have arrived, so any metric that measures the delay between a packet 
+entering the system and its generation being
+forwarded is, in large part, a measurement of the traffic pattern, not of the buffer.\\
+
+Seen this way, the part of packet latency that is actually attributable to the buffer itself is
+would be the \emph{minimum} observed latency, since it corresponds to the case where
+the last packet needed to complete a generation is also the last one to arrive (i.e. the case
+where waiting for other packets does not add wait time). \\
+
+This minimum latency is the one that
+stays within the sub-10~\textmu s target set out in the requirements \ref{system_requirements}. Average or
+maximum packet latency are still useful for
+understanding worst-case system behavior under a given workload, but they should not be read as
+a measure of the buffer's own performance in isolation, since they are dominated by how the
+input traffic happens to be interleaved rather than by anything the buffer's architecture does
+or does not do well. \\
+
+A similar, workload-driven limitation appears on the throughput side for very small packets in
+the packet size sweep. Packets are fed into the buffer one AXI transaction per packet, 
+so the amount of valid data available on the ingest bus in a given cycle
+is bounded by the packet's own size, not by anything the buffer does internally. Once packets
+drop below 64 bytes, a single packet can no longer fill the 512-bit ingest bus in one cycle, so
+part of that cycle's bandwidth simply goes unused regardless of how the rest of the buffer is
+implemented. As with the latency case above, this is a property of the one-transaction-per-packet
+ingest interface and the traffic being fed into it, not a limitation of the buffer's own
+pipeline.
+
+
+\section{Limitations of the current design}
+
+\subsection{Resource utilization}
+
+As shown in the implementation chapter \ref{ch:implementation}, the out-of-context 
+synthesis utilization is dominated by flip-flop usage: no block RAM, UltraRAM, or LUTRAM resources are used
+anywhere in the hierarchy, and flop-based FIFOs alone account for the large majority of the
+design's registers. \\ 
+
+This is a direct consequence of every queue in the design (the per-flow
+packet descriptor queues, the free memory queue, and the smaller FIFOs internal to the write
+and read engines) are currently being built out of simple flip-flop-based FIFO primitives rather
+than being mapped onto dedicated on-chip memory. For a design with 128 per-flow queues, this is
+a significant inefficiency both in area and timing, and is probably the single largest opportunity for improvement.
+
+\subsection{Fixed, global configuration}
+
+As noted in section \ref{subsec:assumptions}, 
+every configurable parameter of the design is fixed at elaboration time, and applies
+uniformly to every flow. \\ 
+
+There is no runtime mechanism through which these parameters could be
+changed once the design is deployed, and no mechanism for giving individual flows different
+treatment from one another. The design is therefore only able to demonstrate that the
+TX datapath of a future SmartNIC system can be built and statically tested against a
+single, fixed configuration, rather than being a directly deployable, runtime-configurable
+module.
+
+\subsection{Total HBM storage vs free memory queue length}
+$<$TODO: Write this out a little more$>$ \\
+
+The actual number of packets that can be buffered at any given time is the length of the free 
+memory queue because it's the total number of available memory positions at reset, regardless 
+of how much storage the HBM actually has.
+
+\subsection{Static per-engine memory access and flow lookup scalability}
+
+The write and read stages are each implemented as a pair of parallel engines
+, and each engine currently has access only to its own portion of the shared memory rather 
+than being able to reach the entire HBM pool. This design choice provides the shortest and most predictable 
+latency, but it also means that if a packet is written into HBM by the write engine 0, 
+it must be read by the read engine 0 because only them have access to that particular region of the HBM. \\
+
+This approach also adds the complexity of having to ensure addresses are properly interleaved so that both
+engines can issue requests in parallel, and greatly penalizes buffering a lot of consecutive packets 
+belonging to the same memory channel.\\
+
+Alternatively, at the cost of some added latency the crossbar in the HBM controller could be enabled 
+so that all engines can access all locations, but the advantages of this approach are unclear 
+as it would simply offload that responsibility to the HBM controller. \\
+
+Separately, the flow ID lookup performed by the tuple table in the flow ingest
+ is not implemented as a true hash table with constant-time
+lookup, and its cost is expected to scale poorly as the number of supported flows grows, since
+its current structure requires comparisons that scale with the number of active entries.
+
+\subsection{Inactive flow handling}
+
+When a flow is declared inactive, the current flush controller handles drops the queued packets of 
+that flow rather than padding them with additional ones to reach the generation 
+size and send it to the encoder. This is a reasonable behavior for a baseline,
+statically-tested design, but simply dropping data might not be acceptable in a full system.
+
+\section{Future design improvements}
+
+\subsection{Moving queues from flip-flops to memory}
+
+% Given that flop-based FIFOs are responsible for the large majority of the design's register
+% usage, converting them to memory-based implementations is the most impactful improvement
+% available. Every FIFO in the design is accessed through exactly two ports at a time -- one
+% write and one read -- which is precisely the access pattern of a simple true dual-port memory;
+% this means each flop-based FIFO can, in principle, be replaced with a small amount of pointer
+% and status logic sitting on top of a dual-port BRAM (or LUTRAM, for the shallower queues)
+% without changing its external interface. The large internal buffers of the read engine
+% (Chapter \ref{ch:implementation}) are particularly good candidates for this change, since they
+% are both large and structurally simple FIFOs.
+Given that flop-based FIFOs are responsible for the large majority of the design's register
+usage, and that the 128 per-flow packet descriptor queues are themselves the largest single
+contributor to that, it is safe to assume it is one of the most impactful improvement available. \\
+
+A key observation here is the fact that, even though there are 128 separate queues,
+only two of them are ever touched in a given cycle across the whole design: the packet writer
+pushes into exactly one flow's queue, and the packet reader pops from exactly one flow's queue,
+at any given time. This access pattern is exactly what a single true dual-port memory can provide. \\
+
+In other words, rather than instantiating 128 independent flop-based FIFOs, the flow queues could 
+be agglomerated into one BRAM-based structure holding all 128 queues' worth of entries, addressed by flow ID and a
+per-flow read/write pointer pair, with the dual-port memory serving the one active push and the
+one active pop each cycle. The same general principle also applies individually to the large
+internal buffers of the read engine (see \ref{ch:implementation}), which are large enough on
+their own to be worth converting even without being agglomerated with anything else.
+
+\subsection{Runtime configuration and per-flow parameters}
+
+The Open NIC Shell already provides for slave configuration registers, which this thesis
+deliberately left out of scope (Section \ref{subsec:assumptions}). Adding them would let
+parameters such as the generation size be set at runtime instead of at elaboration time, and
+would open the door to parameters that do not yet exist in this design, such as per-flow
+redundancy level or flow priority. \\ 
+
+A further extension worth considering is allowing such
+parameters to be set independently per flow, rather than uniformly across the whole system, so
+that flows with different reliability or latency requirements could be served differently by
+the same buffer instance.
+
+% \subsection{Full crossbar memory access and scalable flow lookup}
+%
+% Extending the interconnect between the write engines and the shared HBM pool into a full
+% crossbar, so that every write engine can reach every part of the shared memory rather than only
+% its own portion, would remove the current static partitioning and let memory be allocated
+% purely on demand across the whole design rather than per engine. Separately, replacing the
+% current tuple table with a proper hash-table-based implementation would let flow admission scale
+% independently of the number of currently active flows, addressing the scalability concern noted
+% above.
+
+\subsection{Absorbing packet-size variation and avoiding data loss}
+
+The packet size sweep performed in \ref{ch:evaluation} showed throughput to be largely
+insensitive to packet size, but any remaining variation could likely be further reduced by
+resizing and tuning the internal queues of the write and read engines to better absorb bursts of
+larger packets. Finally, as explained above the flush controller discussed above could be extended 
+to pad an incomplete generation with dummy data instead of dropping it outright, giving the encoder a
+well-formed generation to operate on even in cases where not enough real packets arrived in
+time.

@@ -1,4 +1,4 @@
-\chapter{Evaluation}
+\chapter{Evaluation}\label{ch:evaluation}
 % Using the previously presented implementation, you can now evaluate your approach.\\
 % Get as many quantitative measurements as possible.  E.g. compare
 % different implementations in terms of hardware usage, latency...\\
@@ -11,12 +11,13 @@
 Before turning to aggregate performance numbers, it is useful to look at a single, simple
 run of the design to confirm that the datapath behaves as intended. Figure~\ref{fig:waves} shows a
 simulation waveform for a minimal case in which four packets, all belonging to the same flow,
-are fed into the buffer with the generation size configured to four. The four packets are
-written in order and are eventually forwarded to the encoder together, once the full
+are fed into the buffer with the generation size configured to four. \\
+
+The four packets are written in order and are eventually forwarded to the encoder together, once the full
 generation is available. The waveform also shows the free memory queue and the flow's packet
 descriptor queue being popped and pushed, respectively, as each packet is written: notably,
-the free memory queue is popped -- and the corresponding \gls{axi} write requests to \gls{hbm}
-begin -- before the packet has fully arrived at the write engine, rather than only after the
+the free memory queue is popped right as the corresponding \gls{axi} write requests to \gls{hbm}
+begin, i.e. the memory requests begin before the packet has fully arrived at the write engine, rather than only after the
 whole packet has been buffered locally.
 
 \begin{figure}
@@ -38,36 +39,43 @@ uses the example configuration introduced in Section~\ref{subsec:assumptions} (g
 
 \subsection{Testbench architecture}
 
-The design is evaluated using an almost UVM-like testbench, built to allow controlled,
-repeatable stimulus generation alongside fine-grained monitoring of the datapath. It consists
-of three main components. A behavioral \gls{hbm} memory model stands in for the physical
-\gls{hbm} subsystem, with independently configurable response latency and in-flight
-transaction depth for both read and write requests, allowing the buffer to be exercised under
-different memory-timing assumptions. A UDP packet generator drives the ingress side of the
-design; it supports parametrizable packet length as well as configurable interleaving between
-flows, letting the number of flows, the number of packets sent per flow, and the interleaving
-pattern between them all be chosen per test. Finally, a simple \gls{fec} encoder model sits on
-the egress side, and simply consumes whatever data the buffer forwards to it, without
-performing any encoding itself. All three components -- the packet generator, the \gls{hbm}
-model, and the encoder model -- communicate with the design under test over the same
-\gls{axi}-Stream interfaces described in Chapter~\ref{ch:implementation}.
+The design is evaluated using an almost UVM-like testbench shown in \ref{fig:tb}, built to allow controlled,
+repeatable stimulus generation. It consists of three main components: a behavioral \gls{hbm} 
+memory model, with independently configurable response latency and in-flight transaction depth for both read and write requests;
+a UDP packet generator that drives the ingress side of the design and supports parametrizable packet length, number of flows,
+interleaving between flows, and number of packets sent per flow; and finally, a simple \gls{fec} 
+encoder model sitting on the egress side, which simply consumes whatever data the buffer forwards to it without
+performing any encoding itself. \\
+
+All three components (the packet generator, the \gls{hbm} model, and the encoder model) communicate with the design under test over the same
+\gls{axi}-Stream interfaces described in Chapter~\ref{ch:implementation}. Besides the aforementioned components, 
+both the packet generator and encoder model are connected to a global scoreboard that keeps track of all the sent packets, and eventually 
+provides the latency and throughput metrics.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/tb.png}
+  \end{center}
+  \caption{Testbench architecture}\label{fig:tb}
+\end{figure}
+
 
 \subsection{Test suite and configs}
 
-Three sweeps are used to characterize the design's behavior along different axes. The packet
-size sweep  evaluates raw throughput and latency as a function of packet size. The
+Three sweeps are used to characterize the design's behavior along different axes: the packet
+size sweep evaluates raw throughput and latency as a function of packet size, the
 interleaving sweep evaluates how the pattern in which packets from different flows
-arrive affects latency. Finally, the configuration sweep  evaluates how scaling the
-design's parameters -- generation size, flow count, and queue depths -- together affects both
+arrive affects latency, and the configuration sweep evaluates how scaling the
+design's parameters (generation size, flow count, and queue depths) affects both
 throughput and latency.
 
 \subsection{Packet size sweep}
 
 The goal of this sweep is to evaluate raw throughput across a range of packet sizes. For this
 test, 64 packets per flow are sent across 16 flows, in bursts of 16 packets at randomly
-interleaved flow order, under three packet-size variations: maximum-size (1500 B) packets,
+interleaved flow order, under three packet size variations: maximum-size (1500 B) packets,
 minimum-size (46 B) packets, and randomly sized packets drawn from a uniform distribution.
-Figure~\ref{fig:pkt_sweep} shows the results. Throughput does not vary significantly across the
+Figure \ref{fig:pkt_sweep} shows the results. Throughput does not vary significantly across the
 three cases, which is the expected and desirable outcome: it confirms that the memory
 pipeline, built around multiple outstanding in-flight \gls{hbm} requests, is working as
 intended rather than stalling between requests of different sizes. Latency shows a small but
@@ -90,7 +98,7 @@ flow are sent across 128 flows, under three interleaving patterns: a worst case,
 generator iterates over every flow sending one packet at a time (burst size of 1) before
 returning to the first flow; a best case, in which the generator sends a full generation's
 worth of packets (burst size of 32) to one flow before moving to the next; and a randomized
-case, drawn from a uniform distribution over flows.
+case, drawn from a uniform distribution over flows.\\
 
 The worst-case pattern is also the easiest to reason about analytically, and is the only one
 of the three for which a theoretical figure is given here, since it is dramatically larger
@@ -98,10 +106,9 @@ than the other two: for any given flow to complete a generation, the buffer must
 31 more packets from each of the other 127 flows, i.e. \(128 \times 31\) packets, before the
 last packet of the reference flow's generation arrives. At the maximum packet size of 1500 B,
 this amounts to 12.1 MB that must be transferred before the encoder receives anything, which at
-100 Gb/s corresponds to a theoretical delay of approximately
-970 $\mu$s.
+100 Gb/s corresponds to a theoretical delay of approximately 970 $\mu$s. \\
 
-The measured results, shown in Figure~\ref{fig:burst_sweep}, remain well below this theoretical
+The measured results, shown in figure \ref{fig:burst_sweep}, remain well below this theoretical
 bound: the worst-case pattern yields an average latency of 116,415 ns and a
 maximum latency of 349,623 ns, while the randomized pattern yields an average
 latency of 37,616 ns and a maximum of 179,779 ns. That the
@@ -109,8 +116,9 @@ measured worst-case latency sits so far below the fully-serial theoretical estim
 consistent with the memory pipeline's use of multiple outstanding in-flight requests, discussed
 in Chapter~\ref{ch:implementation}: the 970 $\mu$s figure assumes every intervening
 packet is transferred strictly one after another, whereas in practice several of these
-transfers can be in flight simultaneously.
+transfers can be in flight simultaneously. \\
 
+% The best-case scenario shows a mini
 % \todo{Add the best-case (burst size 32) measured latency numbers here for completeness.}
 
 \begin{figure}
@@ -122,9 +130,9 @@ transfers can be in flight simultaneously.
 
 \subsection{Configuration sweep}
 
-This final sweep keeps the proportions between the design's parameters fixed -- in particular,
+This final sweep keeps the proportions between the design's parameters fixed, in particular,
 the free memory queue and per-flow queue depths remain sized relative to the generation size
-as in Section~\ref{subsec:assumptions} -- while varying their absolute values, in order to see how
+as in section \ref{subsec:assumptions}, while varying their absolute values, in order to see how
 scaling the design up or down affects performance. As in the packet size sweep, 64 packets per
 flow are sent across 16 flows. Figure~\ref{fig:cfg_sweep} shows that throughput remains roughly
 similar across the swept configurations; the more significant effect is on packet latency,
@@ -132,7 +140,7 @@ where the generation size is the dominant factor, since a packet cannot be forwa
 encoder until its entire generation has been accumulated.
 
 Table~\ref{tab:cfg-sweep} lists the three configurations tested. Each keeps the same ratios as the
-example configuration of Section~\ref{subsec:assumptions}: the free memory queue depth is always 32
+example configuration of section \ref{subsec:assumptions}: the free memory queue depth is always 32
 times the generation size, and the flow count is always 4 times the generation size.
 
 \begin{table}[h]
@@ -162,9 +170,9 @@ times the generation size, and the flow count is always 4 times the generation s
 \section{Utilization}
 
 To obtain an early estimate of the design's resource cost independently of the surrounding
-Open NIC Shell and HBM IP integration, an out-of-context synthesis of \texttt{packet\_buffer\_top}
-was performed in Vivado using the example configuration of \cref{tab:example-config}
-(generation size 32, 128 flows, a free memory queue depth of 1024, and a per-flow queue depth
+Open NIC Shell and HBM IP integration, an out-of-context synthesis of \texttt{packet\_buffer\_top} (the top top-level module in the hierarchy) 
+was performed in Vivado using the example configuration of \cref{tab:example-config} 
+(generation size 32, 128 flows, a free memory queue depth of 1024, and a per-flow queue depth 
 of 64). \\
 
 The diagram in \ref{fig:oob_util} shows the resulting utilization broken down by primitive type. As the
@@ -184,10 +192,10 @@ dedicated memory primitives. \\
 Table \ref{tab:util-breakdown} decomposes the same synthesis run by pipeline stage, mapping each
 top-level instance in the hierarchical utilization report back onto the stages introduced in
 chapter \ref{ch:design}: flow ingest (\texttt{i\_flow\_ingest}), the packet writer
-(\texttt{i\_chunk\_ingest}, comprising both write-engine instances), the packet descriptor
+(\texttt{i\_pkt\_writer}, comprising both write-engine instances), the packet descriptor
 queues (the 128 per-flow \texttt{fifo\_sync\_1r1w} instances under \texttt{gen\_pkt\_fifos}),
 the free memory queue (\texttt{i\_mem\_fifo} together with the address-interleaving buffer
-\texttt{pkt\_addr\_ilv\_buf}), and the packet reader (\texttt{pkt\_reader}, comprising both
+\texttt{pkt\_addr\_ilv\_buf}), and the packet reader (\texttt{i\_pkt\_reader}, comprising both
 read-engine instances and the round-robin arbiter).
 
 

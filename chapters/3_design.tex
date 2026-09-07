@@ -1,6 +1,6 @@
 \chapter{Design}\label{ch:design}
-The main part of your thesis. Here you describe your approach to solve
-the problem you stated in the Introduction.  Be as general as possible.
+% The main part of your thesis. Here you describe your approach to solve
+% the problem you stated in the Introduction.  Be as general as possible.
 
 \section{Context} % Where does the design live?
 As stated in \cref{ch:introduction}, packet-level \gls{fec} protects a flow against loss by
@@ -56,7 +56,7 @@ without changing the core architecture. That being said, the proposed design can
 be synthesized as-is and should allow to statically test a future complete SmartNiC system. \\
 
 The design is meant to be fully configurable, but some core decissions require a plausible 
-target workload. TODO: CITE CONC FLOW CNT count Based on measurements reported in the literature, 
+target workload. $<$TODO: CITE CONC FLOW CNT$>$ count Based on measurements reported in the literature, 
 on the order of 30 to 40 flows can be expected to require concurrent \gls{fec} protection at any given time in a
 representative deployment. Using this as a start reference point, the example configuration used
 throughout the rest of this thesis is deliberately chosen on the larger side, in order to

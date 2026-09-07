@@ -51,14 +51,55 @@ variable-sized packets, since packets can occupy different numbers of blocks in 
 The descriptor-based approach also separates packet storage from queue management. Pushing or popping a packet mainly involves manipulating small descriptors 
 and pointers rather than moving the packet data itself, which reduces unnecessary data movement and makes flow management easier. Naturally, total memory size also scales better with this approach and facilitates managing a larger number of concurrent flows.
 
+% \section{Specific challenges}
+% Despite providing a very solid starting point for an implementation, there 
+%
+% \begin{itemize}
+%   \item The papers don't mention specifics handling of active/inactive flows.
+%   \item We have only 1 producer and consumer, potentially more consumers in the future.
+%   \item No mention of fixed-size stream of output packets needed 
+%   \item No specifics on memory access latency to maintain throughput
+% \end{itemize}
+
 \section{Specific challenges}
-Despite providing a very solid starting point for an implementation, there 
+Despite providing a very solid starting point for an implementation, there are several aspects
+of the problem tackled in this thesis that the reviewed literature does not directly address,
+and which had to be resolved independently of it:
 
 \begin{itemize}
-  \item The papers don't mention specifics handling of active/inactive flows.
-  \item We have only 1 producer and consumer, potentially more consumers in the future.
-  \item No mention of fixed-size stream of output packets needed 
-  \item No specifics on memory access latency to maintain throughput
+  \item \textbf{Handling of active and inactive flows.} The generic shared-memory buffer
+  described in \cite{inproceedings} assumes a fixed, known set of queues to allocate memory
+  between, but does not discuss how a queue is assigned to a given flow in the first place, nor
+  how that assignment is later reclaimed once a flow stops being active. This thesis's use case
+  involves a large but bounded number of physical queues serving a potentially much larger and
+  constantly changing population of flows, so an explicit admission and eviction mechanism --
+  assigning an internal flow ID to a new tuple, and later returning that ID to a pool of free
+  IDs once the flow goes idle. This mechanism had to be designed from scratch, as described for flow ingest
+  in section \ref{sec:flow-ingest}.
+
+  \item \textbf{Single producer and consumer.} The switch architectures described in the
+  reviewed literature are built around many concurrent output ports, each independently
+  consuming from the shared memory pool, and correspondingly many logical consumers reading at
+  once. The design in this thesis instead has a single producer (the ingress packet stream) and
+  a single consumer (the FEC encoder), which simplifies the scheduling problem considerably
+  compared to a full multi-port switch. This also means the reviewed designs offer little
+  direct guidance on how to extend this design should more than one downstream consumer need to
+  be served in the future.
+
+  \item \textbf{Fixed-size output grouping.} A switch's output ports consume packets from a
+  queue as soon as they are available and as fast as the output link allows, but the 
+  FEC encoder targeted by this thesis, can only operate on a complete, fixed-size 
+  generation of packets from a single flow at a time. This
+    requirement (accumulating a specific number of packets per flow before any of them can be
+  released) is entirely absent from the reviewed shared-memory literature and had to be
+  designed into the packet reader independently, as described in the design chapter.
+
+  \item \textbf{Memory access latency and throughput.} The reviewed work describes the
+  shared-memory architecture at a structural level, but does not give specifics on the memory
+  access latency needed to sustain a given throughput, nor on how the buffer-management logic
+  should be pipelined to hide that latency. Meeting the throughput and latency requirements set
+  out in section \ref{system_requirements} on top of \gls{hbm}, whose access latency is
+  significant relative to the target line rate, required working out this budget and the
+  associated pipelining (e.g. multiple outstanding memory requests) independently, as covered in
+  chapter \ref{ch:implementation}.
 \end{itemize}
-
-
