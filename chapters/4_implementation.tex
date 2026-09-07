@@ -72,7 +72,7 @@ and evaluate custom networking functions directly on an FPGA, and it is the plat
 the design is aimed to be integrated in the future, together with the \gls{fec} encoder and the eventual
 RX packet buffer and \gls{fec} decoder. \\
 
-As shown in As shown in \ref{fig:open_nic_shell}, 
+As shown in \ref{fig:open_nic_shell}, 
 the platform offers two slots in the data path to add custom user plugins (i.e. custom modules): the 250 MHz and 
 the 325 MHz box. The main architectural difference between the two is that the 325 MHz box is directly connected 
 to the \gls{cmac} interface, which does not allow back pressure and forces the developer to attend data to be immediately 
