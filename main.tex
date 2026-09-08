@@ -37,10 +37,32 @@
 % --- Thesis abstract.
 %     For German thesis also provide an English version via the optional
 %     argument: \abstract[English]{German}
-\abstract{An abstract is defined as an abbreviated accurate
-  representation of the contents of a document. -- American National
-  Standards Institute (ANSI)}
+\abstract{
+Forward error correction (FEC) for packet networks operates on fixed-size generations of
+packets belonging to the same flow, rather than on packets individually as they arrive
+interleaved across many concurrent flows. This thesis presents the design and
+simulation-based verification of a packet buffer that bridges this mismatch, implemented as an
+extension to the Open NIC Shell targeting an AMD/Xilinx Alveo U55C. Following a shared-memory
+architecture, packet payloads are stored in a single HBM-backed pool shared across all flows,
+while each flow is tracked through a small queue of packet addresses that a packet reader stage
+drains in complete generations for the encoder. The design was verified with an almost
+UVM-like testbench and, across a range of packet sizes, flow-interleaving patterns, and
+configurations, sustains throughput close to 100 Gb/s while keeping its own contribution to
+packet latency under 10 microseconds. The results also show that overall latency is largely
+governed by how traffic is interleaved across flows rather than by the buffer itself, and point
+to flip-flop-heavy resource usage and fixed, elaboration-time configuration as the main
+directions for future work.}
+
 \makeabstract
+\clearpage
+
+\addchap*{Acknowledgements}
+This is done as an exchange bla bla bla thank the universities for making this possible, and the advisors for coordinating this on both ends.
+
+(in german) Thanks to the LIS people for their hospitality in these months
+
+SMD bois, amics, erasmus 
+
 \clearpage
 
 \newacronym{hbm}{HBM}{High Bandwidth Memory}
@@ -70,7 +92,7 @@
 \include{chapters/5_evaluation}
 \include{chapters/6_discussion}
 \include{chapters/7_conclusion}
-\include{chapters/appendix}
+%\include{chapters/appendix}
 
 
 % --- Bibliography
