@@ -42,21 +42,25 @@
 % --- Thesis abstract.
 %     For German thesis also provide an English version via the optional
 %     argument: \abstract[English]{German}
-\abstract{
-Forward error correction (FEC) for packet networks operates on fixed-size generations of
-packets belonging to the same flow, rather than on packets individually as they arrive
-interleaved across many concurrent flows. This thesis presents the design and
-simulation-based verification of a packet buffer that bridges this mismatch, implemented as an
-extension to the Open NIC Shell targeting an AMD/Xilinx Alveo U55C. Following a shared-memory
-architecture, packet payloads are stored in a single HBM-backed pool shared across all flows,
-while each flow is tracked through a small queue of packet addresses that a packet reader stage
-drains in complete generations for the encoder. The design was verified with an almost
-UVM-like testbench and, across a range of packet sizes, flow-interleaving patterns, and
-configurations, sustains throughput close to 100 Gb/s while keeping its own contribution to
-packet latency under 10 microseconds. The results also show that overall latency is largely
-governed by how traffic is interleaved across flows rather than by the buffer itself, and point
-to flip-flop-heavy resource usage and fixed, elaboration-time configuration as the main
-directions for future work.}
+\abstract{Applying forward error correction (FEC) to a live packet stream requires grouping packets from
+the same flow into fixed-size generations before they can be encoded, which creates a mismatch
+with how packets actually arrive at a network interface: individually, and interleaved across
+many concurrent flows. This thesis presents the design and simulation-based evaluation of a
+packet buffer that bridges this mismatch, implemented as an extension to the Open NIC Shell
+targeting an AMD/Xilinx Alveo U55C. Following a shared-memory architecture, packet payloads are
+stored in a single HBM-based memory pool shared across all flows, while each flow is tracked through a
+small queue of packet addresses that a packet reader stage drains in complete generations for
+the encoder. \\
+
+The design was verified with a UVM-like testbench and, across a range of
+packet sizes, flow-interleaving patterns, and configurations, sustains the data rate it is fed
+from the host while keeping its own contribution to packet latency under
+10 microseconds. Every major parameter of the design, including generation size, flow count,
+and queue depths, is fully configurable, and its modular, stage-based structure is intended to
+be easy to build on. The results also show that overall packet latency is largely governed by how
+traffic is interleaved across flows rather than by the buffer itself, and point to
+flip-flop usage and fixed elaboration-time configuration as the main directions
+for future work.}
 
 \makeabstract
 \clearpage
@@ -69,12 +73,9 @@ This has been carried out during an Erasmus exchange. I would like to personally
 the Escola Tècnica Superior d'Enginyeria de Telecomunicacions de Barcelona for making this possible, and specially thank my advisors William Wulff and 
 Juan Antonio Chávez for offering their extensive support and guidance, and for coordinating the effort on both ends. \\
 
-(TODO: in german) Thanks to the people at the Chair of Integrated Systems for their openness and hospitality, and specially to Markus, Reinhold and 
-Mattia for the kicker games and sticking through the ups and downs both inside and outside the student room. \\
-
-% Vielen Dank an die Mitarbeiterinnen und Mitarbeiter des Lehrstuhls für Integrierte Systeme für ihre Offenheit und Gastfreundschaft und 
-% insbesondere an Markus, Reinhold und Mattia für die Kickerpartien und dafür, dass ihr gemeinsam mit mir durch die Höhen und Tiefen gegangen seid – 
-% sowohl innerhalb als auch außerhalb des Studentenraums. \\
+Vielen Dank an die Mitarbeiter:innen und Studierenden des Lehrstuhls für Integrierte Systeme für ihre Offenheit und Gastfreundschaft.
+Insbesondere auch an Markus, Reinhold und Mattia für den Spaß und die Unterstützung und dafür, dass sie gemeinsam mit mir durch die 
+Höhen und Tiefen gegangen sind, sowohl innerhalb als auch außerhalb des Büros. \\
 
 Gràcies a tots els grans amics que heu estat allà, tant els de fora com els de casa, pel vostre caliu i per fer-me millor persona. \\
 
@@ -82,52 +83,7 @@ I finalment, voldria dedicar un agraïment especial als meus pares, Bernat i Lou
 
 \clearpage
 
-\addchap*{Revision history and approval record}
-
-\noindent
-\begin{tabularx}{\textwidth}{|c|l|l|>{\raggedright\arraybackslash}X|}
-  \hline
-  \textbf{Revision} & \textbf{Date} & \textbf{Author(s)} & \textbf{Description} \\
-  \hline
-  1.0 & 06/06/2024 & ARM & Document creation \\ \hline
-  1.1 & 10/06/2024 & DC & Internal G+D revision \\ \hline
-  1.2 & 14/06/2024 & JACD & First draft revision \\
-  \hline
-\end{tabularx}
-
-\vspace{1cm}
-
-\noindent\textbf{DOCUMENT DISTRIBUTION LIST} \\
-
-\noindent
-\begin{tabularx}{\textwidth}{|l|>{\raggedright\arraybackslash}X|}
-  \hline
-    \textbf{Role} & \textbf{Surname(s) and Name} \\
-  \hline
-    Student & Andreu Roca Montserrat \\
-  \hline
-    Project Supervisor at ETSETB & Juan Antonio Chávez Domínguez \\
-  \hline
-    Project Supervisor at G+D & David Conde \\
-  \hline
-\end{tabularx}
-
-\vspace{1cm}
-
-\noindent
-\begin{tabularx}{\textwidth}{|l|>{\raggedright\arraybackslash}X||l|>{\raggedright\arraybackslash}X|}
-  \hline
-    \multicolumn{2}{|l||}{\textbf{Written by:}}  &  \multicolumn{2}{l|}{\textbf{Reviewed and approved by:}} \\
-  \hline
-    Date &  06/06/2024 & Date &  dd/mm/yyyy \\
-  \hline
-    Name & Andreu Roca Montserrat & Name &  Xxxxxxx Yyyyyyy \\
-  \hline
-    Position & Project Author & Position & Project Supervisor \\
-  \hline
-\end{tabularx}
-
-\clearpage
+\include{chapters/revision_history}
 
 \newacronym{hbm}{HBM}{High Bandwidth Memory}
 \newacronym{cmac}{CMAC}{Gigabit Media Access Control}
@@ -155,7 +111,7 @@ I finalment, voldria dedicar un agraïment especial als meus pares, Bernat i Lou
 \include{chapters/4_implementation}
 \include{chapters/5_evaluation}
 \include{chapters/6_discussion}
-%\include{chapters/8_costs}
+\include{chapters/8_costs}
 \include{chapters/7_conclusion}
 %\include{chapters/appendix}
 
