@@ -18,3 +18,9 @@ clean:
 .PHONY: purge
 purge:
 	rm -rf $(OUT)
+
+.PHONY: cover
+cover:
+	# pdftk build/main.pdf img/first-page.pdf cat 1 2-end output build/main_with_cover.pdf
+	pdftk A=img/first-page.pdf B=build/main.pdf cat A1 B2-end output build/tfm_andreu_roca.pdf
+

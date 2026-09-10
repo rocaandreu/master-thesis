@@ -5,27 +5,27 @@
 %
 % There is plenty of work on network switching and buffer architecture
 
-The objective of a packet buffer is to temporarily store incoming packets and organize them by flows so that different consumers 
+The objective of a flow-aware packet buffer is to temporarily store incoming packets and organize them by flows so that different consumers 
 can ingest them. Let us consider the case of a network switch as an example where there are many output interfaces operating at the same time and 
 each of them has provides access to a different subset of the network. If packet from flow A and B have to be routed through a different physical 
 interface each to reach their destinations, then an agent needs to separate the flows so that they can be routed accordingly. This is in 
-essence the job of a packet buffer. \\
+essence the job of a flow-aware packet buffer. \\
 
 Before presenting the proposed design, this section reviews existing approaches described in the literature. 
-Particularly, it covers the shared-memory architecture, which is the industry standard approach to buffering 
+Particularly, it covers the shared-memory architecture, which is a widely used approach to buffering 
 and rerouting packets in a network processor. That being said, there are specific challenges that are unique 
 to the problem described in the introduction chapter \ref{ch:introduction} which will 
 be discussed here as well.
 
 \section{The shared-memory architecture}
 %Here we explain the behavior of a shared-memory architecture for a router/packet buffer.
-As stated previously, there is renowned research on packet buffer architecture \cite{inproceedings} and their application 
+As stated previously, there is research on packet buffer architecture \cite{inproceedings} and their application 
 in a specific context, \cite{lau2003gigabit} \cite{naous2008netfpga}. For the purposes of this work, the paper published 
 by Queens University Belfast \cite{inproceedings} is particularly relevant as it defines and implements a generic shared 
 packet buffer design. \\
 
-The proposed design follows a shared-memory architecture in which instead of buffering the packets in a per-flow basis where every flow 
-has its own dedicated memory, a common pool of memory is shared across all of them. Then, logical queues store pointers to the packets 
+The proposed design follows a shared-memory architecture, which uses a common pool of memory where all packets are stored, instead of 
+buffering the packets in a per-flow basis where every flow has its own dedicated memory. Then, logical queues store pointers to the packets 
 stored in the memory, which keeps track of which packets belong to which flow; and a different queue stores pointers to unallocated memory 
 locations. This way, when a packet arrives an unallocated memory location is popped, the data from said packet is written in that region, 
 and the pointer to the region is pushed to the respective flow queue. When a packet needs to be consumed, the inverse process takes place, 

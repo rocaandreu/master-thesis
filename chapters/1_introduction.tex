@@ -1,8 +1,7 @@
 \chapter{Introduction}\label{ch:introduction}
-Reading this section should give the reader a understanding why he or
-she should read your thesis and what he or she can expect from it. The
-section should include the following parts.
-
+% Reading this section should give the reader a understanding why he or
+% she should read your thesis and what he or she can expect from it. The
+% section should include the following parts.
 
 \section{Context and motivation}
 
@@ -10,11 +9,14 @@ Any computer connected to a network contains some sort of network interface, usu
 of a \gls{nic} which acts as an interface between the physical layer (e.g. Ethernet or Wi-Fi), 
 and the rest of the system. \\
 
-As network speeds increased and more advanced features were employed in network processing, general purpose CPUs could not always 
-keep up with the required rate and volume of packet processing. In modern high-speed applications network processing is 
-therefore offloaded to the \gls{nic}, and the SmartNiC term was adopted to reflect the additional functionality.\\
+% As network speeds increased and more advanced features were employed in network processing, general purpose CPUs could not always 
+% keep up with all the packet processing at the required rate and volume. In modern high-speed applications, many network processing tasks are 
+% therefore offloaded to the \gls{nic}. 
+As network speeds increased and more advanced features were employed in network processing, the amount of CPU computation 
+available per packet decreased, making CPU-based packet processing increasingly expensive and motivating offloading 
+part of the processing to programmable NICs/SmartNICs \cite{wang2022fpgAnic} \cite{kim2023iotcp}.\\
 
-A SmartNiC contains specific hardware that can perform tasks such as packet classification, filtering, flow handling, 
+A SmartNIC contains specific hardware that can perform tasks such as packet classification, filtering, flow handling, 
 and FEC processing directly on the network interface. This specialized hardware provides a much higher efficiency and speed,
 which allows packets to be processed at or near line rate while freeing the CPU to focus on application-level computation.
 
@@ -23,11 +25,11 @@ which allows packets to be processed at or near line rate while freeing the CPU 
 
 Forward Error Correction (\gls{fec}, and also called channel coding) is a type of digital signal processing that improves data reliability 
 by introducing a known structure into a data sequence prior to transmission or storage. This structure enables a receiving system 
-to detect and possibly correct errors caused by corruption from the channel and the receiver. As the name implies, this coding technique 
+to correct errors caused by corruption or packet erasures from the channel and the receiver. As the name implies, this coding technique 
 enables the decoder to correct errors without requesting retransmission of the original information. However, this approach requires 
 additional processing and bandwidth on the communication channel.\\
 
-\gls{fec} is often applied across multiple packets because redundancy is most useful when it is shared across a group, or block, of source packets. 
+The HyperNIC project focuses particularly on correcting packet erasuers, and in this context \gls{fec} is often applied across multiple packets. 
 By encoding packets together, the sender can generate repair packets that allow the receiver to reconstruct one or more packets lost during 
 transmission, rather than adding independent redundancy to every packet. This makes the available redundancy more efficient and can reduce 
 the need for retransmissions, which is particularly valuable in unreliable, multicast, or high-loss networks. The trade-off is that larger FEC 
@@ -37,19 +39,18 @@ source blocks for this purpose \cite{watson2011fec}.\\
 
 Needless to say, the packets across which the encoding is performed must have the same destination, otherwise the additional information 
 would be pointless. Because of this, network processors must detect packet flows and perform the encoding accordingly. It is important to remark 
-that these FEC computations (or generations) are performed over groups of a fixed amount of packets, and that the size of the group is known as the 
+that these FEC computations are performed over groups of a fixed amount of packets, and that the size of the group is known as the 
 generation size.
 
-\subsection{HyperNiC project}
+\subsection{HyperNIC project}
 This project is done as a part of the HyperNIC project, an initiative funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation), the central self-governing 
-research funding organisation in Germany. The project investigates how SmartNiCs can improve the resilience and reliability of time-sensitive 
+research funding organisation in Germany. The project investigates how SmartNICs can improve the resilience and reliability of time-sensitive 
 communication in connected cyber-physical systems. By combining hardware acceleration with techniques such as network coding and fault-tolerant communication, 
 HyperNIC aims to enable reliable, low-latency data exchange in the presence of network failures or disruptions, while reducing the processing load on host CPUs.
 
 \section{Problem definition}
 The problem to solve is simple at a surface level as illustrated in the diagram \ref{fig:problem_definition},
-where every color represents a different packet flow.
-Although packets arrive in order, they do not necessarily arrive in perfectly sized bursts 
+where every color represents a different packet flow: packets arrive in order to the SmartNIC, but they do not necessarily arrive in generation-sized bursts 
 belonging to a single flow. As stated previously, FEC calculations must be performed on a per-flow basis and over generation-sized blocks; therefore 
 a mechanism is needed to collect and separate packets by flow, accumulate complete generations, and feed them to the FEC encoder in the 
 required order and block size.
@@ -65,13 +66,24 @@ required order and block size.
 % What have others done to solve a similar problem? (keep this short, more to come in the following chapter). Basically, 
 % give a short overview of FEC 
 
-There is relevant literature covering packet buffer architectures for high speeds (further details will be covered in the background chapter \ref{ch:background}). 
-The industry standard approach consists of a shared memory architecture, where a common pool of memory is used to store packets from multiple flows 
-or queues, rather than allocating a dedicated buffer to each flow. Incoming packets are classified by flow and stored in available locations within 
-the shared buffer, while per-flow queues maintain pointers or descriptors to the packets. \\
+%There is relevant literature covering packet buffer architectures for high speeds (further details will be covered in the background chapter \ref{ch:background}). 
+A widely used approach to packet buffering are shared-memory architectures, which have been widely used in commercial LAN
+switches. Seifert and Edwards identify shared memory, shared bus, and
+crosspoint matrix as switch-fabric architectures that have been widely
+used in commercial LAN switch products, and describe shared memory as
+the most popular approach to fabric design in LAN switches
+\cite{seifert2008allnew}. Concrete commercial implementations include
+the Cisco Catalyst 3550 series, which employs a distributed
+shared-memory switch-fabric architecture \cite{aweya2018catalyst3550},
+and the Intel Ethernet Switch Family, which implements an output-queued
+shared-memory architecture \cite{intel2005memory}.
+
+% A widely used approach $<$TODO: ADD SOURCES THAT STATE THAT THIS IS A POPULAR OPTION$>$ consists of a shared memory architecture, where a common pool of memory is used to store packets from multiple flows 
+% or queues, rather than allocating a dedicated buffer to each flow. Incoming packets are classified by flow and stored in available locations within 
+% the shared buffer, while per-flow queues maintain pointers or descriptors to the packets. \\
 
 Some research showcases a generic packet buffer architecture \cite{inproceedings}, and others adapt said architecture to a specific context 
-\cite{lau2003gigabit} \cite{naous2008netfpga}, particularly in high speed network switches and routers. These are very useful starting points, 
+\cite{lau2003gigabit} \cite{naous2008netfpga}, particularly in high speed network switches and routers. These are useful starting points, 
 but they do not cover many relevant implementation details when it comes to tracking flow status and the specifics of handling memory interfaces and latency, 
 which will be discussed in the following chapters \ref{ch:design} and \ref{ch:implementation}.
 
@@ -96,18 +108,26 @@ Particular attention was given to the HBM management architecture, for which sev
 explored to improve memory utilization, access efficiency, and scalability. The results obtained from each iteration informed subsequent 
 design decisions, leading to modifications of the buffering, queueing, and memory-management mechanisms. The architecture presented in this 
 thesis therefore represents the final iteration of this iterative development process, selected based on the functional and hardware-level 
-evaluations performed throughout the design.
+evaluations performed throughout the design. \\
+
+The proposed design is evaluated in simulation using a UVM-like testbench with configurable stimulus patterns with the aim of analysing its 
+performance under different scenarios, and synthesized in an out-of-context flow to assess FPGA resource usage.
 
 \section{Scope and limitations}
 %This is just a first iteration... No RX side...
-The packet buffer presented in this thesis should be considered a first synthesizable implementation of the proposed architecture. The 
-design has been functionally tested and evaluated against the requirements defined for the scope of this work, demonstrating that the 
-main buffering and packet organization mechanisms operate as intended. However, further development would be required before the module 
-could be integrated into a complete FPGA-based system. In particular, the current implementation could be extended with more scalable 
-packet queue implementation, dynamically configurable FEC generation sizes, and mechanisms for handling different flow priorities. These 
-aspects are outside the scope of the current implementation, but the implemented design intentionally facilitates these future modifications. \\
+% The packet buffer presented in this thesis should be considered a first synthesizable implementation of the proposed architecture. The 
+% design has been functionally tested and evaluated against the requirements defined for the scope of this work, demonstrating that the 
+% main buffering and packet organization mechanisms operate as intended. 
 
-Furthermore, the scope of this thesis is limited to the transmit (TX) side of the packet buffer architecture. The corresponding receive (RX) 
+The packet buffer presented in this thesis aims to provide a versatile platform to evaluate different FEC strategies and schemes on a 
+real network environment. \\
+
+Further development could be done to integrate it into a complete FPGA-based system. In particular, the 
+current implementation could be extended with more scalable packet queue implementation, dynamically configurable FEC generation sizes, and 
+mechanisms for handling different flow priorities. These aspects are outside the scope of the current implementation, but the implemented 
+design intentionally facilitates these future modifications. \\
+
+The scope of this thesis targets the transmit (TX) side of the packet buffer architecture, so the corresponding receive (RX) 
 side is therefore not implemented or evaluated as part of this work. Nevertheless, its design could follow a similar architectural approach 
 to the TX side, allowing a significant portion of the existing design, including the buffering and memory-management mechanisms, to be reused. 
 Consequently, the implementation presented here provides a foundation for extending the packet buffer architecture towards a complete TX/RX 

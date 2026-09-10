@@ -15,7 +15,7 @@ HBM-backed memory shared across all flows, while a lightweight, per-flow queue o
 addresses (rather than payloads) tracks each flow's pending packets and exposes them to the
 encoder in complete generations. \\
 
-The design was evaluated purely through simulation, using a testbench built around a
+The design was evaluated through behavioural simulation, using a testbench built around a
 configurable HBM memory model, a parametrizable UDP packet generator, and a simple FEC encoder
 model, all communicating over AXI-Stream. Across the three sweeps performed in
 chapter \ref{ch:evaluation}, the design met the requirements set out in
@@ -24,19 +24,14 @@ section \ref{system_requirements} for the example configuration used throughout 
 of 64): throughput stayed close to the 100 Gb/s target regardless of packet size, and the
 minimum packet latency attributable to the buffer itself stayed under the 10~\textmu s target. \\
 
-As discussed in chapter \ref{ch:discussion}, average and worst-case packet latency were shown
+As discussed in chapter \ref{ch:discussion}, packet latency is shown
 to depend heavily on how packets from different flows happen to be interleaved rather than on
 the buffer's own architecture, and a similar, workload-driven limit was identified on
 throughput for very small packets, arising from the one-transaction-per-packet ingest
 interface rather than from the buffer's internal pipeline. \\
 
-At the same time, the design presented here is closer to baseline rather than a
-deployment-ready module. It has only been verified in simulation, its parameters are fixed at
-elaboration time rather than being runtime-configurable, and its post-synthesis resource usage
-is dominated by flip-flop-based FIFOs rather than dedicated on-chip memory. \\
-
 As it is already covered in chapter \ref{ch:discussion}, 
-the directions for addressing the aforementioned these points would be 
+the directions for addressing the aforementioned points would be 
 consolidating the 128 per-flow packet descriptor queues into a single BRAM-based structure,
 adding the slave configuration registers already contemplated by the Open NIC project to allow
 runtime and per-flow configuration, and replacing the current tuple lookup with a proper hash
@@ -51,5 +46,4 @@ that purpose, specially the ones related to the management of the HBM pool. \\
 Overall, this thesis shows that a shared-memory, address-queue-based packet buffer is a viable
 way to reconcile per-packet arrival with per-generation, per-flow FEC encoding on an
 HBM-equipped SmartNIC platform, and provides both a working baseline implementation and a clear
-set of next steps for turning that baseline into a production-ready component of a future
-SmartNIC transmit pipeline.
+set of next steps for improving the set of features for a future SmartNIC transmit pipeline.

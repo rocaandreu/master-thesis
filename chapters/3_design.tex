@@ -20,21 +20,26 @@ encoder in the overall pipeline, and is the sole subject of this thesis; the enc
 and anything downstream of it are outside its scope.
 
 \subsection{System requirements}\label{system_requirements}
-Based on the context above, the design must satisfy the following requirements:
+Based on the context above, the design should satisfy the following requirements:
 \begin{itemize}
-  \item Throughput of 100 Gb/s to feed Ethernet MAC
-  \item Latency of under 10 $\mu$s to let the \gls{fec} encoder dominate
-  \item Configurable size (from 8 to 64)
-  \item Configurable number of flows
-  \item Configurable generation size
-  \item Configurable queue length (both free memory and flow queues)
+  \item Throughput of 100 Gb/s to achieve the line rate set by the Ethernet MAC
+  \item Packet latency of under 10 $\mu$s (without accounting for buffering time) to let the \gls{fec} encoder dominate
+  \item Configurable number of flows at compile time
+  \item Configurable generation size at compile time
+  \item Configurable queue length (both free memory and flow queues) at compile time
 \end{itemize}
 
 \subsection{Throughput and latency}
 Of the requirements above, throughput and latency are the two that drive the architecture the
-most directly: the buffer must sustain 100 Gbit/s to match the Ethernet
-\gls{cmac} it is fed from, and it must add no more than 10 $\mu$s of latency so
-that the \gls{fec} encoder's own processing time dominates the end-to-end delay budget.\\
+most directly: the buffer must sustain 100 Gbit/s line rate set by the Ethernet
+\gls{cmac}, and it must add no more than 10 $\mu$s of latency so
+that the \gls{fec} encoder's own processing time dominates the end-to-end delay budget. It is important 
+to remark that actual packet latency (time difference from packet ingress to egress) is mostly determined 
+by the input pattern as it seen in \ref{ch:evaluation}. This is caused by the fact that given a generation 
+size of A, we need to wait for A packets from a given flow to arrive before feeding them to the encoder, 
+which does not depend on the packet buffer itself. Instead, the requirement above refers to the time 
+required for a packet to go through the whole datapath without accounting for the idle time it is 
+waiting in the queues. \\
 
 The remaining requirements (configurable flow count, generation 
 size, and queue depths) are primarily parameterization choices rather than architectural 
@@ -43,7 +48,7 @@ chapter is dimensioned and pipelined to meet the throughput and latency targets 
 further in \cref{ch:implementation}.
 
 \subsection{Assumptions and constraints}\label{subsec:assumptions}
-The design presented in this chapter is validated exclusively through simulation; no
+The design presented in this chapter is validated exclusively through behavioural simulation; no
 hardware synthesis, place-and-route, or on-board testing is performed as part of this
 thesis. Consequently, features that are only needed for deployment such as configuration registers, which 
 would expose the configurable parameters at runtime, are considered out of scope and are
@@ -53,13 +58,13 @@ Instead, every configurable parameter (flow count, generation size, and
 queue depths) is fixed at elaboration time. The result should therefore be understood as a
 baseline platform that provides a starting point onto which features can later be added 
 without changing the core architecture. That being said, the proposed design can 
-be synthesized as-is and should allow to statically test a future complete SmartNiC system. \\
+be synthesized as-is and should allow to statically test a future complete SmartNIC system. \\
 
 The design is meant to be fully configurable, but some core decissions require a plausible 
-target workload. $<$TODO: CITE CONC FLOW CNT$>$ count Based on measurements reported in the literature, 
+target workload.  Based on measurements reported in \cite{alizadeh2010dctcp},
 on the order of 30 to 40 flows can be expected to require concurrent \gls{fec} protection at any given time in a
-representative deployment. Using this as a start reference point, the example configuration used
-throughout the rest of this thesis is deliberately chosen on the larger side, in order to
+representative deployment. Using this as a start reference point, the following example configuration is used
+to evaluate the design. It has intentionally been chosen to be on the larger side, in order to
 stress the design: \\
 
 \begin{table}[h]
@@ -79,8 +84,9 @@ stress the design: \\
 
 The flow (packet) queue depth of 64 is set to twice the generation size, so that a full
 generation can be accumulated for one flow while the previous generation is still being
-drained by the read engine, without stalling ingest. With 128 supported flows against an
-expected 30 to 40 concurrent flows, the configuration leaves considerable headroom. \\
+drained by the read engine, without stalling ingest. The 128 supported flows aims to give 
+the configuration leaves considerable headroom against the assumed 30 to 40 concurrent flows 
+as stated in \cite{alizadeh2010dctcp}. \\
 
 This configuration also embeds a simplifying assumption: the flow ingest stage
 (\cref{sec:flow-ingest}) currently maps every tracked flow to exactly one dedicated flow
@@ -198,7 +204,8 @@ around 33 come from the denser UltraRam memory in Xilinx FPGAs. Since the goal o
 hundreds of concurrent flows in the future, building around such a limited pool of storage is not acceptable. \\
 
 Moreover, the memory is distributed across the FPGA fabric, and assembling it all together would likely require an internal network
-that would also use a high amount of resources and greatly increase system complexity.\\
+that would also use a high amount of resources; introducing high wire delays due to the additional routing and greatly increasing 
+overall system complexity.\\
 
 Because of this, the logical decision is to make use of the external memory of the FPGA, which in the U55C's case is the 16 GB worth
 of \gls{hbm}.

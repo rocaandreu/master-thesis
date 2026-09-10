@@ -5,6 +5,35 @@
 % This chapter is usually filled with graphs and numbers.  In the end, the
 % numbers should show how your approach is better (in some regard) than
 % existing approaches.
+The objective of this evaluation is twofold: first, to verify that the design meets the
+requirements set out in section \ref{system_requirements}, primarily throughput and packet
+latency; and second, to assess the resource utilization of the design once synthesized, in
+order to identify how efficiently it uses the available FPGA resources. Performance evaluation
+is carried out through behavioral simulation of the  using the testbench described in
+section \ref{sec:testbench-architecture}, while utilization is assessed separately through
+out-of-context synthesis, as covered in \ref{sec:utilization}.
+
+\section{Testbench architecture}\label{sec:testbench-architecture}
+
+The design is evaluated using an almost UVM-like testbench shown in \ref{fig:tb}, built to allow controlled,
+repeatable stimulus generation. It consists of three main components: a behavioral \gls{hbm} 
+memory model, with independently configurable response latency and in-flight transaction depth for both read and write requests;
+a UDP packet generator that drives the ingress side of the design and supports parametrizable packet length, number of flows,
+interleaving between flows, and number of packets sent per flow; and finally, a simple \gls{fec} 
+encoder model sitting on the egress side, which simply consumes whatever data the buffer forwards to it without
+performing any encoding itself. \\
+
+All three components (the packet generator, the \gls{hbm} model, and the encoder model) communicate with the design under test over the same
+\gls{axi}-Stream interfaces described in chapter \ref{ch:implementation}. Besides the aforementioned components, 
+both the packet generator and encoder model are connected to a global scoreboard that keeps track of all the sent packets, and eventually 
+provides the latency and throughput metrics.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/tb.png}
+  \end{center}
+  \caption{Testbench architecture}\label{fig:tb}
+\end{figure}
 
 \section{Waveform example}
 
@@ -36,29 +65,6 @@ dominates the end-to-end delay. The remainder of this chapter therefore evaluate
 along these two axes. Unless explicitly stated otherwise, every measurement in this chapter
 uses the example configuration introduced in Section~\ref{subsec:assumptions} (generation size 32,
 128 flows, a free memory queue depth of 1024, and a per-flow queue depth of 64).
-
-\subsection{Testbench architecture}
-
-The design is evaluated using an almost UVM-like testbench shown in \ref{fig:tb}, built to allow controlled,
-repeatable stimulus generation. It consists of three main components: a behavioral \gls{hbm} 
-memory model, with independently configurable response latency and in-flight transaction depth for both read and write requests;
-a UDP packet generator that drives the ingress side of the design and supports parametrizable packet length, number of flows,
-interleaving between flows, and number of packets sent per flow; and finally, a simple \gls{fec} 
-encoder model sitting on the egress side, which simply consumes whatever data the buffer forwards to it without
-performing any encoding itself. \\
-
-All three components (the packet generator, the \gls{hbm} model, and the encoder model) communicate with the design under test over the same
-\gls{axi}-Stream interfaces described in Chapter~\ref{ch:implementation}. Besides the aforementioned components, 
-both the packet generator and encoder model are connected to a global scoreboard that keeps track of all the sent packets, and eventually 
-provides the latency and throughput metrics.
-
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=0.95\textwidth]{../img/tb.png}
-  \end{center}
-  \caption{Testbench architecture}\label{fig:tb}
-\end{figure}
-
 
 \subsection{Test suite and configs}
 
@@ -167,7 +173,7 @@ times the generation size, and the flow count is always 4 times the generation s
   \caption{Configuration sweep}\label{fig:cfg_sweep}
 \end{figure}
 
-\section{Utilization}
+\section{Utilization}\label{sec:utilization}
 
 To obtain an early estimate of the design's resource cost independently of the surrounding
 Open NIC Shell and HBM IP integration, an out-of-context synthesis of \texttt{packet\_buffer\_top} (the top top-level module in the hierarchy) 

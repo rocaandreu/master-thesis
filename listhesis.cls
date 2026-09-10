@@ -1,25 +1,8 @@
 %%
-%% This is file `listhesis.cls',
-%% generated with the docstrip utility.
+%% This is file `listhesis.cls', modified to add a second title-page logo
+%% and a "home university" advisor/institution pair (for joint/double-degree
+%% theses), based on the original by Michael Vonbiun <michael.vonbun@tum.de>.
 %%
-%% The original source files were:
-%%
-%% listhesis.dtx  (with options: `class')
-%% 
-%% This is a generated file.
-%% 
-%% Copyright (C) 2017 by Michael Vonbiun <michael.vonbun@tum.de>
-%% 
-%% This file may be distributed and/or modified under the conditions of
-%% the LaTeX Project Public License, either version 1.2 of this license
-%% or (at your option) any later version.  The latest version of this
-%% license is in:
-%% 
-%%    http://www.latex-project.org/lppl.txt
-%% 
-%% and version 1.2 or later is part of all distributions of LaTeX version
-%% 1999/12/01 or later.
-%% 
 \NeedsTeXFormat{LaTeX2e}[1999/12/01]
 \ProvidesClass{listhesis}
     [2017/07/21 v1.0 lis thesis]
@@ -92,11 +75,21 @@ abstract=true]{scrreprt}%
 \define@boolkey[lis]{thesis}{isexternal}{}%
 \define@cmdkey[lis]{thesis}{company}{\lis@thesis@isexternaltrue}%
 \define@cmdkey[lis]{thesis}{externalAdvisor}{\lis@thesis@isexternaltrue}%
+% --- Home-university advisor/institution (for joint / double-degree theses).
+%     Listed at the same level as the (TUM-side) supervisor, not as a
+%     subordinate "external" line.
+\define@boolkey[lis]{thesis}{ishomeuniv}{}%
+\define@cmdkey[lis]{thesis}{homeAdvisor}{\lis@thesis@ishomeunivtrue}%
+\define@cmdkey[lis]{thesis}{homeInstitution}{\lis@thesis@ishomeunivtrue}%
+\define@cmdkey[lis]{thesis}{homeLogo}{\lis@thesis@ishomeunivtrue}%
 \define@cmdkey[lis]{thesis}{AIUsage}{}%
 \def\cmdlis@thesis@supervisor{Supervising Professor}%
 \def\cmdlis@thesis@advisor{Advising PhD. Student}%
 \def\cmdlis@thesis@externalAdvisor{Your Company Advisor}%
 \def\cmdlis@thesis@company{Company the thesis was done}%
+\def\cmdlis@thesis@homeAdvisor{}%
+\def\cmdlis@thesis@homeInstitution{}%
+\def\cmdlis@thesis@homeLogo{}%
 \def\cmdlis@thesis@AIUsage{}%
 \newcommand{\lis@thesis@AIUsage@item}[1]{\item #1}%
 \newcommand{\lis@thesis@AIUsage@list}{%
@@ -109,6 +102,8 @@ abstract=true]{scrreprt}%
 \def\lis@thesis@advisorText{\iflis@thesis@en Advisor\else Betreuer\fi:}%
 \def\lis@thesis@companyText{\iflis@thesis@en Carried~out~at\else Durchgef\"uhrt~bei\fi:}%
 \def\lis@thesis@externalAdvisorText{\iflis@thesis@en External~advisor\else Externer~Betreuer\fi:}%
+\def\lis@thesis@homeAdvisorText{\iflis@thesis@en Supervisor~at~Home~Institution~\else Betreuer~(Heimatuniversit\"at)\fi:}%
+\def\lis@thesis@homeInstitutionText{\iflis@thesis@en Home~Institution\else Heimatuniversit\"at\fi:}%
 \def\lis@thesis@submissionDateText{\iflis@thesis@en Submission~date\else Datum~der~Abgabe\fi:}%
 \define@cmdkey[lis]{thesis}{author}{\author{\cmdlis@thesis@author}}%
 \define@cmdkey[lis]{thesis}{title}{\title{\cmdlis@thesis@title}}%
@@ -142,6 +137,11 @@ abstract=true]{scrreprt}%
 \begin{tikzpicture}[remember picture, overlay]
   \path (current page.north east) ++(-\lis@thesis@title@rightMargin -0.5*740/390*10mm, -\lis@thesis@title@topMargin)
     node {\includegraphics[height=10mm]{img/TUM_Logo_blau_rgb_p.png}};
+  % --- Second (home-university) logo, stacked below the TUM logo.
+  \ifx\cmdlis@thesis@homeLogo\empty\else
+    \path (current page.north east) ++(-\lis@thesis@title@rightMargin -0.5*400/134*10mm, -\lis@thesis@title@topMargin -18mm)
+      node {\includegraphics[height=10mm]{\cmdlis@thesis@homeLogo}};
+  \fi
   \path (current page.north west) ++(\lis@thesis@title@leftMargin, -\lis@thesis@title@topMargin)
     node[right,yshift=0.5mm, xshift=-1.5mm,color=tumblue] {%
       \parbox{100mm}{%
@@ -156,29 +156,23 @@ abstract=true]{scrreprt}%
         {\bfseries\lis@thesis@type@val}}};
   \path (current page.north west) ++(\lis@thesis@title@leftMargin,-113mm-70mm)
     node[right] {%
-      \parbox{160mm}{%
-        \lis@thesis@authorText\\[2ex]
+      \begin{tabular}{@{}l@{\hspace{6mm}}l@{}}
+        \lis@thesis@authorText & \@author \\[2ex]
         \iflis@thesis@isexternal
-          \lis@thesis@companyText\\
-          \lis@thesis@externalAdvisorText\\
+          \lis@thesis@companyText & \cmdlis@thesis@company \\
+          \lis@thesis@externalAdvisorText & \cmdlis@thesis@externalAdvisor \\
         \fi
-        \lis@thesis@advisorText\\
-        \lis@thesis@supervisorText\\[2ex]
-        \lis@thesis@submissionDateText
-      }
+        \lis@thesis@advisorText & \cmdlis@thesis@advisor \\
+        \iflis@thesis@ishomeuniv
+          \lis@thesis@supervisorText & \cmdlis@thesis@supervisor \\
+          \lis@thesis@homeAdvisorText & \cmdlis@thesis@homeAdvisor \\
+          \lis@thesis@homeInstitutionText & \cmdlis@thesis@homeInstitution \\[2ex]
+        \else
+          \lis@thesis@supervisorText & \cmdlis@thesis@supervisor \\[2ex]
+        \fi
+        \lis@thesis@submissionDateText & \cmdlis@thesis@date \\
+      \end{tabular}%
     };
-  \path (current page.north west) ++(\lis@thesis@title@leftMargin +40mm,-113mm-70mm)
-    node[right] {%
-      \parbox{150mm}{%
-        \@author\\[2ex]
-        \iflis@thesis@isexternal
-          \cmdlis@thesis@company\\
-          \cmdlis@thesis@externalAdvisor\\
-        \fi
-        \cmdlis@thesis@advisor\\
-        \cmdlis@thesis@supervisor\\[2ex]
-        \cmdlis@thesis@date
-      }};
   \end{tikzpicture}
 \renewcommand{\sfdefault}{pcr}%
 \end{titlepage}}%

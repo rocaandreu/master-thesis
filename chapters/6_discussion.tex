@@ -97,11 +97,16 @@ single, fixed configuration, rather than being a directly deployable, runtime-co
 module.
 
 \subsection{Total HBM storage vs free memory queue length}
-$<$TODO: Write this out a little more$>$ \\
-
-The actual number of packets that can be buffered at any given time is the length of the free 
-memory queue because it's the total number of available memory positions at reset, regardless 
-of how much storage the HBM actually has.
+Another limitation of the current design is that the total number of packets the system can
+hold at any given time is bounded by the depth of the free memory queue, not by the actual
+amount of space available in HBM. Because every packet buffer slot must have a corresponding
+entry in the free memory queue before it can be allocated, once that queue is empty no further
+packets can be admitted, even if the underlying HBM pool itself is only partially used. The
+queue depth was deliberately chosen, in Section~\ref{subsec:assumptions}, to be smaller than
+what HBM could physically support because sizing the free memory queue closer to the true capacity of
+the shared HBM pool would let the system make use of that additional space, at the cost of a
+larger queue; so if a larger memory pool was required, the implementation of the queue should be 
+reconsidered to allow for better scaling.
 
 \subsection{Static per-engine memory access and flow lookup scalability}
 
@@ -144,7 +149,7 @@ statically-tested design, but simply dropping data might not be acceptable in a 
 % without changing its external interface. The large internal buffers of the read engine
 % (Chapter \ref{ch:implementation}) are particularly good candidates for this change, since they
 % are both large and structurally simple FIFOs.
-Given that flop-based FIFOs are responsible for the large majority of the design's register
+Given that register-based FIFOs are responsible for the large majority of the design's register
 usage, and that the 128 per-flow packet descriptor queues are themselves the largest single
 contributor to that, it is safe to assume it is one of the most impactful improvement available. \\
 

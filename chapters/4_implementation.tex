@@ -35,11 +35,11 @@ More details can be found in the corresponding appendix.
 Previously it was already  mentioned that the design is based on the AMD Alveo U55C. This section aims to give 
 a brief overview of its main characteristics. Further details can be found in the official product Specification \cite{amd_alveo_u55c}. \\
 
-It is an FPGA accelerator card based on the Virtex UltraScale+ XCU55C device, and particularly suited to high-throughput 
-applications because it combines a large pool of FPGA resources with 16 GB of \gls{hbm} providing 460 GB/s of memory 
+It is an FPGA data center accelerator card based on the Virtex UltraScale+ XCU55C device, targeted at networking applications, 
+and particularly suited to high-throughput designs because it combines a large pool of FPGA resources with 16 GB of \gls{hbm} providing 460 GB/s of memory 
 bandwidth and two QSFP28 ports supporting up to 100 Gb/s each. The card connects to the host through PCIe Gen3 x16 
 or dual Gen4 x8, making it suitable for applications involving both high-speed networking and data movement 
-between the host and FPGA.
+between the host and FPGA. \\
 
 \begin{table}[ht]
     \centering
@@ -142,9 +142,10 @@ tready & 1   & out & Ready signal from the receiving side. \\ \hline
 \end{table}
 
 On another note, the clock frequency for the design is 250 MHz as defined in the Open-Nic project. Given the data with of the interface is 512 bits, 
-this gives a maximum theoretical throughput of 128 Gb/s, which is close to the 100 Gb/s maximum the Ethernet MAC can sustain but provides a certain
-freedom to have some idle cycles without compromising the maximum throughput of the SmartNiC.
-
+this gives a maximum theoretical bandwidth of 128 Gb/s, which is close to the 100 Gb/s maximum the Ethernet MAC can sustain but provides a certain
+freedom to have some idle cycles without compromising the maximum throughput of the SmartNIC. It is worth noting that this is just the maximum 
+bandwidth the AXI interafce can provide, instead, actual data throughput will highly depends on how packet boundaries align with the 512-bit chunks 
+(i.e. if the 512 received bits are all actual valid data or partly padding). \\
 \[
 \text{Throughput}
 = 512\,\frac{\text{bits}}{\text{cycle}}
@@ -328,7 +329,7 @@ available in the U55C was the storage capacity, so this aspect must also be cons
 
 Anew, considering that 512 MB of storage are allocated to every pseudo-channel, counting 2KB per packet as described 
 in \ref{subs:mem_architecture}, and assuming two pseudo-channels; 
-yields a total of 500,000 packets, which is enough to fulfil the requirements by one or two orders of magnitude:
+yields a total of 500,000 packets, which is enough to fulfil the requirements by one or two orders of magnitude: \\
 
 \[
 \begin{aligned}
@@ -346,6 +347,9 @@ yields a total of 500,000 packets, which is enough to fulfil the requirements by
 &= \boxed{500{,}000\ \mathrm{packets}}
 \end{aligned}
 \]
+
+It is important to mention that given the large HBM storage pool, the limiting factor on actually usable space for packet storage will 
+be the length of the free memory queue, which determines the total number of descriptors (i.e. memory locations) the packet buffer can access.
 
 % Note that we are basing the design in a shared-memory pool system, so we need to figure out the dimmensions of the pool:
 % Speak about interfaces and HBM IP and how they determined the dimensions of the system. The though process 
