@@ -160,6 +160,17 @@ Most of the architectural decisions are based on working around its characterist
 section provides a very brief summary of the provided features in table \ref{tab:u55c_hbm_overview}. 
 More detailed information can be found in the official product page. \\
 
+The memory is structured into two separate banks, with 16 smaller banks each (see figure \ref{fig:hbm_diagram}). The 
+controller then organizes these smaller banks into 16 pseudo-channel, corresponding each to a separate AXI Stream interface.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.95\textwidth]{../img/hbm_controller_diagram.png}
+  \end{center}
+  \caption{HBM Controller diagram}\label{fig:hbm_diagram}
+\end{figure}
+
+
 \begin{table}
     \centering
     \begin{tabular}{ll}

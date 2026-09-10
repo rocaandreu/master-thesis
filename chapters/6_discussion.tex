@@ -25,12 +25,12 @@
 
 The results presented in Chapter~\ref{ch:evaluation} show that, within the example
 configuration used throughout this thesis, the design behaves as expected across every sweep
-performed: throughput stays close to the 100 Gb/s target regardless of packet size, and packet
+performed: throughput-wise, the packet buffer is able to sustain the rate it is fed from the host 
+regardless of packet size; and packet
 latency, while sensitive to how packets arrive, is bounded by mechanisms that can be reasoned
 about analytically. Because of this, there is comparatively little to discuss in the sense of
 unexpected behavior to explain. This chapter instead focuses on what the results actually
-measure, on where the current baseline design falls short of what a deployable system would
-need, and on the concrete changes that would close that gap.
+measure, and what future work could be considered.
 
 \section{Packet latency and throughput dependence on workload}
 
@@ -45,11 +45,11 @@ entering the system and its generation being
 forwarded is, in large part, a measurement of the traffic pattern, not of the buffer.\\
 
 Seen this way, the part of packet latency that is actually attributable to the buffer itself is
-would be the \emph{minimum} observed latency, since it corresponds to the case where
+would be the \emph{minimum} (or intrinsic) observed latency, since it corresponds to the case where
 the last packet needed to complete a generation is also the last one to arrive (i.e. the case
 where waiting for other packets does not add wait time). \\
 
-This minimum latency is the one that
+This intrinsic latency is the one that
 stays within the sub-10~\textmu s target set out in the requirements \ref{system_requirements}. Average or
 maximum packet latency are still useful for
 understanding worst-case system behavior under a given workload, but they should not be read as
@@ -113,14 +113,14 @@ reconsidered to allow for better scaling.
 The write and read stages are each implemented as a pair of parallel engines
 , and each engine currently has access only to its own portion of the shared memory rather 
 than being able to reach the entire HBM pool. This design choice provides the shortest and most predictable 
-latency, but it also means that if a packet is written into HBM by the write engine 0, 
+intrinsic latency, but it also means that if a packet is written into HBM by the write engine 0, 
 it must be read by the read engine 0 because only them have access to that particular region of the HBM. \\
 
 This approach also adds the complexity of having to ensure addresses are properly interleaved so that both
 engines can issue requests in parallel, and greatly penalizes buffering a lot of consecutive packets 
 belonging to the same memory channel.\\
 
-Alternatively, at the cost of some added latency the crossbar in the HBM controller could be enabled 
+Alternatively, at the cost of some added intrinsic latency the crossbar in the HBM controller could be enabled 
 so that all engines can access all locations, but the advantages of this approach are unclear 
 as it would simply offload that responsibility to the HBM controller. \\
 
@@ -175,7 +175,7 @@ redundancy level or flow priority. \\
 
 A further extension worth considering is allowing such
 parameters to be set independently per flow, rather than uniformly across the whole system, so
-that flows with different reliability or latency requirements could be served differently by
+that flows with different reliability or intrinsic latency requirements could be served differently by
 the same buffer instance.
 
 % \subsection{Full crossbar memory access and scalable flow lookup}
